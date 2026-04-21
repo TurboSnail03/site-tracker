@@ -1,14 +1,11 @@
 import { useState, useEffect, useRef } from 'react'
-import { Share2, Download, Upload, RefreshCw, Trash2, FileJson, FileText, Printer } from 'lucide-react'
+import { Share2, Download, Upload, RefreshCw, Trash2, FileJson, FileText, Printer, Pencil } from 'lucide-react'
 
-// NEW: Added activeProject and switchProject props
-export default function SetupTab({ isDarkMode, categories, setCategories, transactions, setTransactions, processImport, activeProject, switchProject }) {
+// UPDATED: Added renameProject to props
+export default function SetupTab({ isDarkMode, categories, setCategories, transactions, setTransactions, processImport, activeProject, switchProject, renameProject }) {
   const fileInputRef = useRef(null)
-  
-  // NEW: State to hold the list of discovered projects
   const [projects, setProjects] = useState(['Site A'])
 
-  // NEW: Scans localStorage to find all your saved projects
   useEffect(() => {
     const found = Object.keys(localStorage)
       .filter(k => k.startsWith('siteCategories_'))
@@ -19,6 +16,14 @@ export default function SetupTab({ isDarkMode, categories, setCategories, transa
     
     setProjects([...new Set(found)])
   }, [activeProject])
+
+  // NEW: Handler to trigger the rename prompt
+  const handleRenameCurrent = () => {
+    const newName = window.prompt(`Rename "${activeProject}" to:`, activeProject)
+    if (newName && newName.trim() && newName !== activeProject) {
+      renameProject(activeProject, newName.trim())
+    }
+  }
 
   const handleCycleColor = (id) => {
     const newColor = `hsl(${Math.random() * 360}, 75%, 60%)`
@@ -70,8 +75,6 @@ export default function SetupTab({ isDarkMode, categories, setCategories, transa
         table { width: 100%; border-collapse: collapse; font-size: 14px; }
         th, td { border-bottom: 1px solid #cbd5e1; padding: 12px 8px; text-align: left; }
         th { background-color: #f8fafc; text-transform: uppercase; font-size: 10px; letter-spacing: 1px; color: #64748b; }
-        .expense { color: #e11d48; font-weight: bold; }
-        .payment { color: #059669; font-weight: bold; }
         .amount { font-family: monospace; font-size: 16px; }
       </style>
       </head><body>
@@ -88,7 +91,7 @@ export default function SetupTab({ isDarkMode, categories, setCategories, transa
         <td style="font-size: 12px; color: #475569;">${formattedDate}</td>
         <td><b>${catName.toUpperCase()}</b></td>
         <td style="color: #64748b;">${tx.vendor || '-'}</td>
-        <td class="${tx.type}">${tx.type.toUpperCase()}</td>
+        <td>${tx.type.toUpperCase()}</td>
         <td class="amount">₹${tx.amount.toLocaleString('en-IN')}</td>
       </tr>`
     })
@@ -107,32 +110,47 @@ export default function SetupTab({ isDarkMode, categories, setCategories, transa
   return (
     <div className="space-y-8 pb-10 transition-colors duration-300">
       
-      {/* NEW: Project Selection Section */}
+      {/* Project Selection Section */}
       <div className="space-y-4">
         <h3 className={`text-[10px] font-black uppercase tracking-[0.3em] ml-2 italic transition-colors ${
           isDarkMode ? 'text-slate-500' : 'text-amber-900/40'
         }`}>
           Active Project
         </h3>
-        <select
-          value={activeProject}
-          onChange={(e) => {
-            if (e.target.value === 'NEW') {
-              const name = window.prompt("Enter new project name (e.g., Home Renovation):")
-              if (name && name.trim()) switchProject(name.trim())
-            } else {
-              switchProject(e.target.value)
-            }
-          }}
-          className={`w-full p-4 rounded-[1.5rem] outline-none font-black text-sm tracking-tight border shadow-sm transition-all ${
-            isDarkMode ? 'bg-slate-900 border-slate-800 text-white' : 'bg-white border-amber-100 text-slate-800'
-          }`}
-        >
-          {projects.map(p => (
-            <option key={p} value={p}>{p.toUpperCase()}</option>
-          ))}
-          <option value="NEW" className="text-blue-500">+ CREATE NEW PROJECT...</option>
-        </select>
+        
+        {/* NEW: Flex container to hold the Select and the Rename button */}
+        <div className="flex gap-2">
+          <select
+            value={activeProject}
+            onChange={(e) => {
+              if (e.target.value === 'NEW') {
+                const name = window.prompt("Enter new project name (e.g., Home Renovation):")
+                if (name && name.trim()) switchProject(name.trim())
+              } else {
+                switchProject(e.target.value)
+              }
+            }}
+            className={`flex-1 p-4 rounded-[1.5rem] outline-none font-black text-sm tracking-tight border shadow-sm transition-all ${
+              isDarkMode ? 'bg-slate-900 border-slate-800 text-white' : 'bg-white border-amber-100 text-slate-800'
+            }`}
+          >
+            {projects.map(p => (
+              <option key={p} value={p}>{p.toUpperCase()}</option>
+            ))}
+            <option value="NEW" className="text-blue-500">+ CREATE NEW PROJECT...</option>
+          </select>
+
+          {/* NEW: Rename Button */}
+          <button 
+            onClick={handleRenameCurrent}
+            className={`p-4 rounded-2xl border shadow-sm active:scale-90 transition-all ${
+              isDarkMode ? 'bg-slate-800 border-slate-700 text-blue-400' : 'bg-white border-amber-100 text-blue-600'
+            }`}
+            title="Rename current project"
+          >
+            <Pencil size={20} />
+          </button>
+        </div>
       </div>
 
       {/* Material Management Section */}
@@ -193,9 +211,6 @@ export default function SetupTab({ isDarkMode, categories, setCategories, transa
           <FileJson size={32} className="text-blue-400" />
           Click to upload JSON
         </button>
-        <p className="text-[8px] text-slate-500 font-black uppercase text-center mt-4 tracking-widest leading-relaxed italic">
-          Tip: You can drag and drop your file anywhere on the screen!
-        </p>
       </div>
     </div>
   )

@@ -6,16 +6,12 @@ import LogTab from './LogTab'
 import DashboardTab from './DashboardTab'
 
 export default function App() {
-  // NEW: Multi-site active project state
   const [activeProject, setActiveProject] = useState(() => localStorage.getItem('siteActiveProject') || 'Site A')
 
-  // UPDATED: Storage keys now use the activeProject name
   const [categories, setCategories] = useState(() => JSON.parse(localStorage.getItem(`siteCategories_${localStorage.getItem('siteActiveProject') || 'Site A'}`)) || {})
   const [transactions, setTransactions] = useState(() => JSON.parse(localStorage.getItem(`siteTransactions_${localStorage.getItem('siteActiveProject') || 'Site A'}`)) || [])
   
   const [activeTab, setActiveTab] = useState('dashboard')
-  
-  // UPDATED: Modal state now handles pre-filling amounts for the "Settle Up" feature
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [selectedCatId, setSelectedCatId] = useState('')
   const [modalAmount, setModalAmount] = useState('')
@@ -28,7 +24,6 @@ export default function App() {
 
   const [isDragging, setIsDragging] = useState(false)
 
-  // UPDATED: Save data to the specific active project key
   useEffect(() => localStorage.setItem(`siteCategories_${activeProject}`, JSON.stringify(categories)), [categories, activeProject])
   useEffect(() => localStorage.setItem(`siteTransactions_${activeProject}`, JSON.stringify(transactions)), [transactions, activeProject])
   
@@ -39,13 +34,30 @@ export default function App() {
     localStorage.setItem('siteTheme', isDarkMode ? 'dark' : 'light')
   }, [isDarkMode])
 
-  // NEW: Function to switch between projects and load their specific data
   const handleProjectSwitch = (projectName) => {
     setActiveProject(projectName)
     localStorage.setItem('siteActiveProject', projectName)
     setCategories(JSON.parse(localStorage.getItem(`siteCategories_${projectName}`)) || {})
     setTransactions(JSON.parse(localStorage.getItem(`siteTransactions_${projectName}`)) || [])
   }
+
+  // NEW: Rename Engine
+  const handleProjectRename = (oldName, newName) => {
+    if (!newName || newName.trim() === '' || oldName === newName) return;
+    const cleanNewName = newName.trim();
+
+    // Move data in localStorage
+    localStorage.setItem(`siteCategories_${cleanNewName}`, JSON.stringify(categories));
+    localStorage.setItem(`siteTransactions_${cleanNewName}`, JSON.stringify(transactions));
+
+    // Delete old keys
+    localStorage.removeItem(`siteCategories_${oldName}`);
+    localStorage.removeItem(`siteTransactions_${oldName}`);
+
+    // Update state and active project pointer
+    setActiveProject(cleanNewName);
+    localStorage.setItem('siteActiveProject', cleanNewName);
+  };
 
   const processImport = (file) => {
     const reader = new FileReader()
@@ -105,7 +117,6 @@ export default function App() {
       <header className="bg-slate-900 text-white p-5 pt-8 flex justify-between items-center shrink-0 shadow-2xl z-40">
         <div>
           <h1 className="text-xl font-black tracking-tighter italic uppercase">SITE<span className="text-blue-500">TRACKER</span></h1>
-          {/* NEW: Displays the active project name so you don't get confused */}
           <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{activeProject}</p>
         </div>
         <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-2.5 rounded-2xl bg-slate-800 border border-slate-700 active:scale-90 transition-transform">
@@ -137,7 +148,6 @@ export default function App() {
                 isDarkMode={isDarkMode}
                 transactions={transactions} 
                 categories={categories} 
-                // UPDATED: Now receives the exact amount to settle up
                 onCardClick={(id, amount = '', type = 'payment') => { 
                   setSelectedCatId(id); 
                   setModalAmount(amount);
@@ -150,7 +160,6 @@ export default function App() {
 
           {activeTab === 'log' && <LogTab isDarkMode={isDarkMode} transactions={transactions} categories={categories} setTransactions={setTransactions} />}
           
-          {/* UPDATED: Passing the project switcher props */}
           {activeTab === 'setup' && (
             <SetupTab 
               isDarkMode={isDarkMode} 
@@ -161,20 +170,20 @@ export default function App() {
               processImport={processImport} 
               activeProject={activeProject}
               switchProject={handleProjectSwitch}
+              renameProject={handleProjectRename} // NEW
             />
           )}
         </div>
       </main>
 
       <button 
-        // UPDATED: Resets to an empty expense form when you click the main FAB
         onClick={() => { setSelectedCatId(''); setModalAmount(''); setModalType('expense'); setIsModalOpen(true); }} 
-        className={`fixed bottom-28 right-6 bg-blue-600 text-white w-16 h-16 rounded-[2.2rem] shadow-[0_15px_40px_rgba(37,99,235,0.4)] flex items-center justify-center active:scale-75 transition-all z-50 border-4 ${appStyles.fabBorder}`}
+        className={`fixed bottom-28 right-6 bg-blue-600 text-white w-16 h-16 rounded-[2.2rem] shadow-[0_15px_40_rgba(37,99,235,0.4)] flex items-center justify-center active:scale-75 transition-all z-50 border-4 ${appStyles.fabBorder}`}
       >
         <PlusCircle size={32} strokeWidth={2.5} />
       </button>
 
-      <nav className={`fixed bottom-0 w-full backdrop-blur-xl flex justify-around p-4 pb-10 z-40 shadow-[0_-10px_40px_rgba(139,69,19,0.05)] transition-colors duration-300 ${appStyles.navBg}`}>
+      <nav className={`fixed bottom-0 w-full backdrop-blur-xl flex justify-around p-4 pb-10 z-40 shadow-[0_-10px_40_rgba(139,69,19,0.05)] transition-colors duration-300 ${appStyles.navBg}`}>
         {[ 
           {id: 'dashboard', icon: LayoutDashboard, label: 'Stats'}, 
           {id: 'log', icon: List, label: 'Log'}, 
@@ -193,8 +202,8 @@ export default function App() {
         onClose={() => setIsModalOpen(false)} 
         categories={categories} 
         initialCatId={selectedCatId} 
-        initialAmount={modalAmount} // NEW
-        initialType={modalType}     // NEW
+        initialAmount={modalAmount} 
+        initialType={modalType}     
         onAddTransaction={handleAddTransaction}
         transactions={transactions} 
       />
