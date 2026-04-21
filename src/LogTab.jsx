@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Trash2, ArrowUpRight, ArrowDownLeft, Search } from 'lucide-react'
 
-export default function LogTab({ transactions, categories, setTransactions }) {
+export default function LogTab({ isDarkMode, transactions, categories, setTransactions }) {
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState('all') 
 
@@ -22,7 +22,9 @@ export default function LogTab({ transactions, categories, setTransactions }) {
   return (
     <div className="space-y-4 pb-20">
       {/* Search & Filter Bar */}
-      <div className="bg-white dark:bg-slate-900 p-4 rounded-[2rem] shadow-xl border border-slate-100 dark:border-slate-800 space-y-3">
+      <div className={`p-4 rounded-[2rem] shadow-xl border space-y-3 transition-colors ${
+        isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-amber-100'
+      }`}>
         <div className="relative">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
           <input 
@@ -30,7 +32,9 @@ export default function LogTab({ transactions, categories, setTransactions }) {
             placeholder="Search material or vendor..." 
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-12 pr-4 py-3 bg-slate-50 dark:bg-slate-800 rounded-2xl outline-none font-bold text-sm dark:text-white"
+            className={`w-full pl-12 pr-4 py-3 rounded-2xl outline-none font-bold text-sm transition-colors ${
+              isDarkMode ? 'bg-slate-800 text-white' : 'bg-amber-50/50 text-slate-800'
+            }`}
           />
         </div>
         <div className="flex gap-2">
@@ -38,7 +42,11 @@ export default function LogTab({ transactions, categories, setTransactions }) {
             <button 
               key={type}
               onClick={() => setFilter(type)}
-              className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${filter === type ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' : 'bg-slate-50 dark:bg-slate-800 text-slate-400'}`}
+              className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                filter === type 
+                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' 
+                  : (isDarkMode ? 'bg-slate-800 text-slate-400' : 'bg-amber-50 text-amber-900/40')
+              }`}
             >
               {type}
             </button>
@@ -52,21 +60,25 @@ export default function LogTab({ transactions, categories, setTransactions }) {
           const cat = categories[tx.categoryId] || { name: 'Unknown' }
           const isExpense = tx.type === 'expense'
           return (
-            <div key={tx.id} className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 flex items-center justify-between">
+            <div key={tx.id} className={`p-4 rounded-2xl border flex items-center justify-between transition-colors ${
+              isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-amber-50'
+            }`}>
               <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isExpense ? 'bg-rose-50 text-rose-500' : 'bg-emerald-50 text-emerald-600'}`}>
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                  isExpense ? 'bg-rose-50 text-rose-500' : 'bg-emerald-50 text-emerald-600'
+                }`}>
                   {isExpense ? <ArrowUpRight size={20} /> : <ArrowDownLeft size={20} />}
                 </div>
                 <div>
-                  <p className="font-black text-slate-800 dark:text-white leading-tight uppercase text-xs tracking-tight">{cat.name}</p>
+                  <p className={`font-black leading-tight uppercase text-xs tracking-tight ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>{cat.name}</p>
                   <p className="text-[9px] text-slate-400 font-bold uppercase">{tx.date} {tx.vendor && `• ${tx.vendor}`}</p>
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <p className={`font-black text-sm ${isExpense ? 'text-slate-800 dark:text-gray-200' : 'text-emerald-600'}`}>
+                <p className={`font-black text-sm ${isExpense ? (isDarkMode ? 'text-slate-200' : 'text-slate-800') : 'text-emerald-600'}`}>
                   {isExpense ? '' : '+'}₹{tx.amount.toLocaleString()}
                 </p>
-                <button onClick={() => handleDelete(tx.id)} className="text-slate-200 hover:text-rose-500 active:scale-75 transition-all">
+                <button onClick={() => handleDelete(tx.id)} className="text-slate-300 hover:text-rose-500 active:scale-75 transition-all">
                   <Trash2 size={16} />
                 </button>
               </div>

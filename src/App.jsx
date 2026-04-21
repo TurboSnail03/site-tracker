@@ -11,15 +11,21 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard')
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [selectedCatId, setSelectedCatId] = useState('')
-  const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('siteTheme') === 'dark')
+  
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    const saved = localStorage.getItem('siteTheme')
+    return saved ? saved === 'dark' : true 
+  })
+
   const [isDragging, setIsDragging] = useState(false)
 
   useEffect(() => localStorage.setItem('siteCategories', JSON.stringify(categories)), [categories])
   useEffect(() => localStorage.setItem('siteTransactions', JSON.stringify(transactions)), [transactions])
   
   useEffect(() => {
-    if (isDarkMode) document.documentElement.classList.add('dark')
-    else document.documentElement.classList.remove('dark')
+    const root = window.document.documentElement
+    if (isDarkMode) root.classList.add('dark')
+    else root.classList.remove('dark')
     localStorage.setItem('siteTheme', isDarkMode ? 'dark' : 'light')
   }, [isDarkMode])
 
@@ -52,9 +58,21 @@ export default function App() {
     return { expense, paid, remaining: Math.max(0, expense - paid) }
   }, [transactions])
 
+  const appStyles = {
+    bg: isDarkMode ? 'bg-slate-950' : 'bg-[#FBEDD0]',
+    cardBg: isDarkMode ? 'bg-slate-900' : 'bg-white',
+    cardBorder: isDarkMode ? 'border-slate-800' : 'border-amber-100/50',
+    statBoxBg: isDarkMode ? 'bg-slate-800/60' : 'bg-amber-50/50',
+    shadow: isDarkMode ? 'shadow-black/50' : 'shadow-amber-900/10',
+    navBg: isDarkMode ? 'bg-slate-900/95 border-slate-800' : 'bg-[#FBEDD0]/95 border-amber-100/50',
+    text: isDarkMode ? 'text-slate-200' : 'text-slate-700',
+    textSubtle: isDarkMode ? 'text-slate-400' : 'text-amber-900/40',
+    fabBorder: isDarkMode ? 'border-slate-950' : 'border-[#FBEDD0]',
+  }
+
   return (
     <div 
-      className="h-screen bg-slate-50 dark:bg-slate-950 flex flex-col transition-colors overflow-hidden relative"
+      className={`h-screen flex flex-col transition-colors duration-300 overflow-hidden relative ${appStyles.bg} ${appStyles.text}`}
       onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
       onDragLeave={() => setIsDragging(false)}
       onDrop={(e) => { e.preventDefault(); setIsDragging(false); processImport(e.dataTransfer.files[0]); }}
@@ -66,37 +84,36 @@ export default function App() {
         </div>
       )}
 
-      {/* HEADER: Original Dark Look */}
       <header className="bg-slate-900 text-white p-5 pt-8 flex justify-between items-center shrink-0 shadow-2xl z-40">
-        <h1 className="text-xl font-black tracking-tighter italic">SITE<span className="text-blue-500">TRACKER</span></h1>
+        <h1 className="text-xl font-black tracking-tighter italic uppercase">SITE<span className="text-blue-500">TRACKER</span></h1>
         <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-2.5 rounded-2xl bg-slate-800 border border-slate-700 active:scale-90 transition-transform">
           {isDarkMode ? <Sun size={20} className="text-yellow-400" /> : <Moon size={20} className="text-blue-300" />}
         </button>
       </header>
 
-      {/* SCROLLABLE MAIN: Exact layout from screenshot */}
       <main className="flex-1 overflow-y-auto no-scrollbar">
         <div className="max-w-md mx-auto p-4 pb-40">
           {activeTab === 'dashboard' && (
             <>
-              {/* SUMMARY CARD: Restored exactly as in your 'Old Look' screenshot */}
-              <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] p-8 shadow-2xl border border-slate-100 dark:border-slate-800 mb-8">
-                <p className="text-[10px] text-slate-400 font-black uppercase tracking-[0.2em] mb-1">Balance Due</p>
-                <h2 className="text-6xl font-black text-rose-500 tracking-tighter mb-10">₹{globalStats.remaining.toLocaleString()}</h2>
+              <div className={`rounded-[2.5rem] p-8 shadow-2xl border mb-8 relative overflow-hidden transition-colors duration-300 ${appStyles.cardBg} ${appStyles.cardBorder} ${appStyles.shadow}`}>
+                <p className={`text-[10px] font-black uppercase tracking-[0.2em] mb-1 ${appStyles.textSubtle}`}>Balance Due</p>
+                <h2 className={`text-5xl font-black text-rose-500 ${isDarkMode ? 'dark:text-rose-400' : ''} tracking-tighter`}>₹{globalStats.remaining.toLocaleString()}</h2>
                 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-slate-50 dark:bg-slate-800/60 p-5 rounded-[1.8rem]">
-                    <p className="text-[9px] font-black opacity-40 dark:text-slate-400 uppercase mb-1">Total Cost</p>
-                    <p className="font-black text-slate-700 dark:text-slate-200 text-lg">₹{globalStats.expense.toLocaleString()}</p>
+                <div className={`grid grid-cols-2 gap-4 mt-8 pt-6 border-t ${appStyles.cardBorder}`}>
+                  <div className={`p-4 rounded-3xl ${appStyles.statBoxBg}`}>
+                    <p className={`text-[9px] font-black uppercase mb-1 opacity-60 dark:opacity-80 ${appStyles.textSubtle}`}>Total Cost</p>
+                    <p className={`font-black ${appStyles.text}`}>₹{globalStats.expense.toLocaleString()}</p>
                   </div>
-                  <div className="bg-slate-50 dark:bg-slate-800/60 p-5 rounded-[1.8rem]">
-                    <p className="text-[9px] font-black text-emerald-600/60 uppercase mb-1">Total Paid</p>
-                    <p className="font-black text-emerald-600 text-lg">₹{globalStats.paid.toLocaleString()}</p>
+                  <div className={`p-4 rounded-3xl ${appStyles.statBoxBg} border border-emerald-100/20 dark:border-emerald-900/20`}>
+                    <p className="text-[9px] font-black text-emerald-600 dark:text-emerald-400 uppercase mb-1 opacity-80">Total Paid</p>
+                    <p className="font-black text-emerald-600 dark:text-emerald-400">₹{globalStats.paid.toLocaleString()}</p>
                   </div>
                 </div>
               </div>
 
+              {/* Added isDarkMode prop here */}
               <DashboardTab 
+                isDarkMode={isDarkMode}
                 transactions={transactions} 
                 categories={categories} 
                 onCardClick={(id) => { setSelectedCatId(id); setIsModalOpen(true); }} 
@@ -104,21 +121,20 @@ export default function App() {
             </>
           )}
 
-          {activeTab === 'log' && <LogTab transactions={transactions} categories={categories} setTransactions={setTransactions} />}
-          {activeTab === 'setup' && <SetupTab categories={categories} setCategories={setCategories} transactions={transactions} setTransactions={setTransactions} processImport={processImport} />}
+          {/* Added isDarkMode prop here */}
+          {activeTab === 'log' && <LogTab isDarkMode={isDarkMode} transactions={transactions} categories={categories} setTransactions={setTransactions} />}
+          {activeTab === 'setup' && <SetupTab isDarkMode={isDarkMode} categories={categories} setCategories={setCategories} transactions={transactions} setTransactions={setTransactions} processImport={processImport} />}
         </div>
       </main>
 
-      {/* FAB: Restored Border Color */}
       <button 
         onClick={() => { setSelectedCatId(''); setIsModalOpen(true); }} 
-        className="fixed bottom-28 right-6 bg-blue-600 text-white w-16 h-16 rounded-[2.2rem] shadow-[0_15px_40px_rgba(37,99,235,0.4)] flex items-center justify-center active:scale-75 transition-all z-50 border-4 border-slate-50 dark:border-slate-950"
+        className={`fixed bottom-28 right-6 bg-blue-600 text-white w-16 h-16 rounded-[2.2rem] shadow-[0_15px_40px_rgba(37,99,235,0.4)] flex items-center justify-center active:scale-75 transition-all z-50 border-4 ${appStyles.fabBorder}`}
       >
         <PlusCircle size={32} strokeWidth={2.5} />
       </button>
 
-      {/* NAVIGATION: Restored exact style */}
-      <nav className="fixed bottom-0 w-full bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-t border-slate-100 dark:border-slate-800 flex justify-around p-4 pb-10 z-40 shadow-[0_-10px_40px_rgba(0,0,0,0.05)]">
+      <nav className={`fixed bottom-0 w-full backdrop-blur-xl flex justify-around p-4 pb-10 z-40 shadow-[0_-10px_40px_rgba(139,69,19,0.05)] transition-colors duration-300 ${appStyles.navBg}`}>
         {[ 
           {id: 'dashboard', icon: LayoutDashboard, label: 'Stats'}, 
           {id: 'log', icon: List, label: 'Log'}, 
@@ -131,7 +147,9 @@ export default function App() {
         ))}
       </nav>
 
+      {/* Added isDarkMode prop here */}
       <TransactionModal 
+        isDarkMode={isDarkMode}
         isOpen={isModalOpen} 
         onClose={() => setIsModalOpen(false)} 
         categories={categories} 

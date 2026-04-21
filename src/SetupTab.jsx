@@ -1,7 +1,7 @@
 import { useRef } from 'react'
 import { Share2, Download, Upload, RefreshCw, Trash2, FileJson } from 'lucide-react'
 
-export default function SetupTab({ categories, setCategories, transactions, setTransactions, processImport }) {
+export default function SetupTab({ isDarkMode, categories, setCategories, transactions, setTransactions, processImport }) {
   const fileInputRef = useRef(null)
 
   const handleCycleColor = (id) => {
@@ -34,24 +34,36 @@ export default function SetupTab({ categories, setCategories, transactions, setT
   }
 
   return (
-    <div className="space-y-8 pb-10">
+    <div className="space-y-8 pb-10 transition-colors duration-300">
+      {/* Material Management Section */}
       <div className="space-y-4">
-        <h3 className="text-[10px] font-black text-amber-900/40 dark:text-slate-500 uppercase tracking-[0.3em] ml-2">Material Management</h3>
+        <h3 className={`text-[10px] font-black uppercase tracking-[0.3em] ml-2 italic transition-colors ${
+          isDarkMode ? 'text-slate-500' : 'text-amber-900/40'
+        }`}>
+          Material Management
+        </h3>
         <div className="space-y-2">
           {Object.values(categories).map(cat => (
-            <div key={cat.id} className="bg-white dark:bg-slate-900 p-4 rounded-[1.5rem] border border-amber-100/50 dark:border-slate-800 flex items-center justify-between shadow-sm">
+            <div key={cat.id} className={`p-4 rounded-[1.5rem] border flex items-center justify-between shadow-sm transition-all ${
+              isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-amber-100/50'
+            }`}>
               <div className="flex items-center gap-3">
                 <button onClick={() => handleCycleColor(cat.id)} className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-black shadow-md active:scale-90 transition-transform" style={{ backgroundColor: cat.color }}>
                   <RefreshCw size={14} />
                 </button>
-                <p className="font-bold dark:text-white uppercase tracking-tight text-sm">{cat.name}</p>
+                <p className={`font-bold uppercase tracking-tight text-sm ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>
+                  {cat.name}
+                </p>
               </div>
-              <button onClick={() => handleDelete(cat.id)} className="p-3 text-slate-300 hover:text-rose-500 active:scale-90 transition-colors"><Trash2 size={18} /></button>
+              <button onClick={() => handleDelete(cat.id)} className="p-3 text-slate-300 hover:text-rose-500 active:scale-90 transition-colors">
+                <Trash2 size={18} />
+              </button>
             </div>
           ))}
         </div>
       </div>
 
+      {/* Backup Card */}
       <div className="bg-blue-600 rounded-[2.5rem] p-7 text-white shadow-xl shadow-blue-500/30">
         <h2 className="text-xl font-black mb-2 flex items-center gap-2 tracking-tighter uppercase italic"><Share2 size={20}/> Cloud Backup</h2>
         <p className="text-[10px] font-bold opacity-70 uppercase tracking-widest leading-relaxed mb-6 italic">Save data to your device</p>
@@ -60,6 +72,7 @@ export default function SetupTab({ categories, setCategories, transactions, setT
         </button>
       </div>
 
+      {/* Restore Card (Kept dark to match the app header) */}
       <div className="bg-slate-800 dark:bg-slate-900 rounded-[2.5rem] p-7 border border-slate-700 dark:border-slate-800 shadow-xl">
         <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-4 flex items-center gap-2 italic"><Upload size={16}/> Restore Data</h3>
         <input type="file" accept=".json" className="hidden" ref={fileInputRef} onChange={handleFileChange} />
