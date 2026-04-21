@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { Share2, Download, Upload, RefreshCw, Trash2, FileJson, FileText, Printer, Pencil } from 'lucide-react'
+import { cycleColor } from './colors'
 
 export default function SetupTab({
   isDarkMode,
@@ -42,7 +43,8 @@ export default function SetupTab({
   }
 
   const handleCycleColor = (id) => {
-    const newColor = `hsl(${Math.random() * 360}, 75%, 60%)`
+    // cycleColor picks from the curated palette, avoiding the current color
+    const newColor = cycleColor(categories[id]?.color)
     setCategories({ ...categories, [id]: { ...categories[id], color: newColor } })
   }
 
@@ -130,18 +132,18 @@ export default function SetupTab({
     setTimeout(() => { printWindow.print(); printWindow.close() }, 250)
   }
 
-  const cardStyle    = isDarkMode ? 'bg-slate-900 border-slate-800 text-white' : 'bg-white border-amber-100 text-slate-800'
-  const subTextStyle = isDarkMode ? 'text-slate-500' : 'text-amber-900/40'
+  const card   = isDarkMode ? 'bg-slate-900 border-slate-800/70 text-slate-100' : 'bg-white border-slate-200/80 text-slate-800'
+  const subtle = isDarkMode ? 'text-slate-500' : 'text-slate-400'
+  const inputBg = isDarkMode ? 'bg-slate-800 text-slate-100' : 'bg-slate-50 text-slate-800'
 
   return (
-    <div className="space-y-8 pb-10 transition-colors duration-300">
+    <div className="space-y-6 pb-10">
 
-      {/* Project Selection */}
-      <div className="space-y-4">
-        <h3 className={`text-[10px] font-black uppercase tracking-[0.3em] ml-2 italic ${subTextStyle}`}>
+      {/* ── Active Project ────────────────────────────────────────────────── */}
+      <div className="space-y-3">
+        <h3 className={`text-[10px] font-bold uppercase tracking-[0.3em] ml-1 ${subtle}`}>
           Active Project
         </h3>
-
         <div className="flex gap-2">
           <select
             value={activeProject}
@@ -153,92 +155,96 @@ export default function SetupTab({
                 switchProject(e.target.value)
               }
             }}
-            className={`flex-1 p-4 rounded-[1.5rem] outline-none font-black text-sm tracking-tight border shadow-sm transition-all ${cardStyle}`}
+            className={`flex-1 p-4 rounded-xl outline-none font-bold text-sm tracking-tight border shadow-sm transition-all ${card}`}
           >
             {projects.map(p => (
               <option key={p} value={p}>{String(p).toUpperCase()}</option>
             ))}
-            <option value="NEW" className="text-blue-500">+ CREATE NEW PROJECT...</option>
+            <option value="NEW" className="text-blue-500">+ CREATE NEW PROJECT…</option>
           </select>
 
           <button
             onClick={handleRenameCurrent}
-            className={`p-4 rounded-2xl border shadow-sm active:scale-90 transition-all ${
+            className={`p-4 rounded-xl border shadow-sm active:scale-90 transition-all ${
               isDarkMode
-                ? 'bg-slate-800 border-slate-700 text-blue-400'
-                : 'bg-white border-amber-100 text-blue-600'
+                ? 'bg-slate-800 border-slate-700/60 text-blue-400 hover:bg-slate-700'
+                : 'bg-white border-slate-200 text-blue-600 hover:bg-slate-50'
             }`}
           >
-            <Pencil size={20} />
+            <Pencil size={18} />
           </button>
         </div>
       </div>
 
-      {/* Material Management */}
-      <div className="space-y-4">
-        <h3 className={`text-[10px] font-black uppercase tracking-[0.3em] ml-2 italic ${subTextStyle}`}>
-          Material Management
+      {/* ── Material Management ───────────────────────────────────────────── */}
+      <div className="space-y-3">
+        <h3 className={`text-[10px] font-bold uppercase tracking-[0.3em] ml-1 ${subtle}`}>
+          Materials
         </h3>
         <div className="space-y-2">
+          {Object.values(categories).length === 0 && (
+            <p className={`text-[10px] text-center py-6 ${subtle}`}>No materials added yet.</p>
+          )}
           {Object.values(categories).map(cat => (
             <div
               key={cat.id}
-              className={`p-4 rounded-[1.5rem] border flex items-center justify-between shadow-sm transition-all ${cardStyle}`}
+              className={`p-3.5 rounded-xl border flex items-center justify-between shadow-sm transition-all ${card}`}
             >
               <div className="flex items-center gap-3">
                 <button
                   onClick={() => handleCycleColor(cat.id)}
-                  className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-black shadow-md active:scale-90 transition-transform"
+                  className="w-9 h-9 rounded-lg flex items-center justify-center text-white shadow-md active:scale-90 transition-transform"
                   style={{ backgroundColor: cat.color }}
+                  title="Cycle color"
                 >
-                  <RefreshCw size={14} />
+                  <RefreshCw size={13} />
                 </button>
-                <p className="font-bold uppercase tracking-tight text-sm">{cat.name}</p>
+                <p className="font-semibold uppercase tracking-tight text-sm">{cat.name}</p>
               </div>
               <button
                 onClick={() => handleDelete(cat.id)}
-                className="p-3 text-slate-300 hover:text-rose-500 active:scale-90 transition-colors"
+                className={`p-2 rounded-lg transition-all active:scale-90 ${subtle} hover:text-rose-500 hover:bg-rose-50`}
               >
-                <Trash2 size={18} />
+                <Trash2 size={16} />
               </button>
             </div>
           ))}
         </div>
       </div>
 
-      {/* Export Card */}
-      <div className="bg-blue-600 rounded-[2.5rem] p-7 text-white shadow-xl shadow-blue-500/30">
-        <h2 className="text-xl font-black flex items-center gap-2 tracking-tighter uppercase italic mb-4">
-          <Share2 size={20} /> Data Export
+      {/* ── Export Card ───────────────────────────────────────────────────── */}
+      <div className="bg-gradient-to-br from-blue-600 to-blue-700 rounded-2xl p-6 text-white shadow-xl shadow-blue-600/30">
+        <h2 className="text-base font-black flex items-center gap-2 tracking-tight uppercase mb-4">
+          <Share2 size={18} /> Data Export
         </h2>
-        <div className="grid grid-cols-2 gap-3 mb-3">
+        <div className="grid grid-cols-2 gap-2.5 mb-2.5">
           <button
             onClick={handleExportCSV}
-            className="bg-blue-700 hover:bg-blue-800 text-white font-black py-4 rounded-2xl flex items-center justify-center gap-2 active:scale-95 transition-colors uppercase tracking-widest text-[9px]"
+            className="bg-blue-500/60 hover:bg-blue-500/80 text-white font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 active:scale-95 transition-all text-[10px] uppercase tracking-widest"
           >
             <FileText size={14} /> Excel / CSV
           </button>
           <button
             onClick={handleExportPDF}
-            className="bg-blue-700 hover:bg-blue-800 text-white font-black py-4 rounded-2xl flex items-center justify-center gap-2 active:scale-95 transition-colors uppercase tracking-widest text-[9px]"
+            className="bg-blue-500/60 hover:bg-blue-500/80 text-white font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 active:scale-95 transition-all text-[10px] uppercase tracking-widest"
           >
             <Printer size={14} /> Print PDF
           </button>
         </div>
         <button
           onClick={handleExport}
-          className="w-full bg-white text-blue-600 font-black py-4 rounded-2xl flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-transform uppercase tracking-widest text-[10px]"
+          className="w-full bg-white text-blue-600 font-black py-3.5 rounded-xl flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-transform text-[10px] uppercase tracking-widest hover:bg-blue-50"
         >
-          <Download size={16} /> Backup JSON Data
+          <Download size={15} /> Backup JSON
         </button>
       </div>
 
-      {/* Restore Card */}
-      <div className={`p-7 rounded-[2.5rem] border-2 border-dashed transition-colors duration-300 ${
-        isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-amber-50/20 border-amber-200/50'
-      } shadow-xl`}>
-        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-4 flex items-center gap-2 italic">
-          <Upload size={16} /> Restore Data
+      {/* ── Restore Card ──────────────────────────────────────────────────── */}
+      <div className={`p-6 rounded-2xl border-2 border-dashed transition-colors ${
+        isDarkMode ? 'bg-slate-900 border-slate-700' : 'bg-slate-50 border-slate-200'
+      }`}>
+        <h3 className={`text-[10px] font-bold uppercase tracking-[0.3em] mb-4 flex items-center gap-2 ${subtle}`}>
+          <Upload size={14} /> Restore Data
         </h3>
         <input
           type="file"
@@ -249,9 +255,13 @@ export default function SetupTab({
         />
         <button
           onClick={() => fileInputRef.current?.click()}
-          className="w-full bg-slate-700 dark:bg-slate-800 hover:bg-slate-600 text-white font-black py-8 rounded-[2rem] border-4 border-dashed border-slate-600 flex flex-col items-center justify-center gap-3 active:scale-95 transition-all uppercase tracking-widest text-xs"
+          className={`w-full py-7 rounded-xl border-2 border-dashed flex flex-col items-center justify-center gap-3 active:scale-95 transition-all text-xs font-bold uppercase tracking-widest ${
+            isDarkMode
+              ? 'border-slate-700 hover:border-blue-600/50 text-slate-400 hover:text-blue-400'
+              : 'border-slate-300 hover:border-blue-400 text-slate-400 hover:text-blue-500'
+          }`}
         >
-          <FileJson size={32} className="text-blue-400" />
+          <FileJson size={28} className="text-blue-500" />
           Click to upload JSON
         </button>
       </div>

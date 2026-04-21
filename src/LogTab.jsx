@@ -2,9 +2,9 @@ import { useState } from 'react'
 import { Trash2, ArrowUpRight, ArrowDownLeft, Search } from 'lucide-react'
 
 export default function LogTab({ isDarkMode, transactions, categories, setTransactions }) {
-  const [search, setSearch]           = useState('')
-  const [filter, setFilter]           = useState('all')
-  const [timeFilter, setTimeFilter]   = useState('all')
+  const [search, setSearch]         = useState('')
+  const [filter, setFilter]         = useState('all')
+  const [timeFilter, setTimeFilter] = useState('all')
 
   // FIX #3: Use functional updater (prev =>) to avoid stale closure.
   // Previously `transactions` was captured at render time, meaning a second
@@ -32,8 +32,8 @@ export default function LogTab({ isDarkMode, transactions, categories, setTransa
 
       if (timeFilter === 'month') {
         matchesTime =
-          txDate.getMonth()     === now.getMonth() &&
-          txDate.getFullYear()  === now.getFullYear()
+          txDate.getMonth()    === now.getMonth() &&
+          txDate.getFullYear() === now.getFullYear()
       } else if (timeFilter === 'week') {
         // Anchor both ends to midnight so comparisons are day-clean
         const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
@@ -53,46 +53,48 @@ export default function LogTab({ isDarkMode, transactions, categories, setTransa
     return `${date} • ${time}`.toUpperCase()
   }
 
+  const inputBg  = isDarkMode ? 'bg-slate-800 text-slate-100'  : 'bg-slate-50 text-slate-800'
+  const subtle   = isDarkMode ? 'text-slate-500'               : 'text-slate-400'
+  const cardBase = isDarkMode ? 'bg-slate-900 border-slate-800/70' : 'bg-white border-slate-200/80'
+
   return (
-    <div className="space-y-4 pb-20">
-      {/* Search & Filter Bar */}
-      <div className={`p-4 rounded-[2rem] shadow-xl border space-y-3 transition-colors ${
-        isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-amber-100'
-      }`}>
+    <div className="space-y-3 pb-20">
+
+      {/* ── Search & Filter Card ──────────────────────────────────────────── */}
+      <div className={`p-4 rounded-2xl border shadow-sm space-y-3 ${cardBase}`}>
+        {/* Search input */}
         <div className="relative">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+          <Search className={`absolute left-3.5 top-1/2 -translate-y-1/2 ${subtle}`} size={16} />
           <input
             type="text"
-            placeholder="Search material or vendor..."
+            placeholder="Search material or vendor…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className={`w-full pl-12 pr-4 py-3 rounded-2xl outline-none font-bold text-sm transition-colors ${
-              isDarkMode ? 'bg-slate-800 text-white' : 'bg-amber-50/50 text-slate-800'
-            }`}
+            className={`w-full pl-10 pr-4 py-2.5 rounded-xl outline-none text-sm font-medium transition-colors ${inputBg}`}
           />
         </div>
 
+        {/* Time filter */}
         <select
           value={timeFilter}
           onChange={(e) => setTimeFilter(e.target.value)}
-          className={`w-full p-3 rounded-2xl outline-none font-black text-[10px] uppercase tracking-widest cursor-pointer transition-colors ${
-            isDarkMode ? 'bg-slate-800 text-white' : 'bg-amber-50/50 text-slate-800'
-          }`}
+          className={`w-full p-2.5 rounded-xl outline-none text-[10px] font-bold uppercase tracking-widest cursor-pointer transition-colors ${inputBg}`}
         >
           <option value="all">Time: All Time</option>
           <option value="month">Time: This Month</option>
           <option value="week">Time: Past 7 Days</option>
         </select>
 
+        {/* Type filter pills */}
         <div className="flex gap-2">
           {['all', 'expense', 'payment'].map(type => (
             <button
               key={type}
               onClick={() => setFilter(type)}
-              className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+              className={`flex-1 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all ${
                 filter === type
-                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30'
-                  : (isDarkMode ? 'bg-slate-800 text-slate-400' : 'bg-amber-50 text-amber-900/40')
+                  ? 'bg-blue-600 text-white shadow-md shadow-blue-500/25'
+                  : (isDarkMode ? 'bg-slate-800 text-slate-400' : 'bg-slate-100 text-slate-500')
               }`}
             >
               {type}
@@ -101,48 +103,55 @@ export default function LogTab({ isDarkMode, transactions, categories, setTransa
         </div>
       </div>
 
-      {/* The List */}
-      <div className="space-y-3">
+      {/* ── Transaction List ──────────────────────────────────────────────── */}
+      <div className="space-y-2">
         {filteredTransactions.map(tx => {
-          const cat       = categories[tx.categoryId] || { name: 'Unknown' }
+          const cat       = categories[tx.categoryId] || { name: 'Unknown', color: '#94a3b8' }
           const isExpense = tx.type === 'expense'
           return (
             <div
               key={tx.id}
-              className={`p-4 rounded-2xl border flex items-center justify-between transition-colors ${
-                isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-amber-50'
-              }`}
+              className={`p-3.5 rounded-xl border flex items-center justify-between transition-colors ${cardBase}`}
             >
               <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                {/* Type icon badge */}
+                <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
                   isExpense ? 'bg-rose-50 text-rose-500' : 'bg-emerald-50 text-emerald-600'
                 }`}>
-                  {isExpense ? <ArrowUpRight size={20} /> : <ArrowDownLeft size={20} />}
+                  {isExpense
+                    ? <ArrowUpRight size={18} strokeWidth={2.5} />
+                    : <ArrowDownLeft size={18} strokeWidth={2.5} />}
                 </div>
+
                 <div>
-                  <p className={`font-black leading-tight uppercase text-xs tracking-tight ${
-                    isDarkMode ? 'text-white' : 'text-slate-800'
-                  }`}>
-                    {cat.name}
-                  </p>
-                  <p className="text-[9px] text-slate-400 font-bold uppercase">
-                    {formatDateTime(tx.date)}{tx.vendor && ` • ${tx.vendor}`}
+                  {/* Category dot + name */}
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: cat.color }} />
+                    <p className={`font-bold text-xs uppercase tracking-tight leading-tight ${
+                      isDarkMode ? 'text-slate-100' : 'text-slate-800'
+                    }`}>
+                      {cat.name}
+                    </p>
+                  </div>
+                  <p className={`text-[9px] font-medium mt-0.5 ${subtle}`}>
+                    {formatDateTime(tx.date)}{tx.vendor && ` · ${tx.vendor}`}
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-3">
-                <p className={`font-black text-sm ${
+
+              <div className="flex items-center gap-2.5">
+                <p className={`font-black text-sm tracking-tight ${
                   isExpense
                     ? (isDarkMode ? 'text-slate-200' : 'text-slate-800')
-                    : 'text-emerald-600'
+                    : 'text-emerald-500'
                 }`}>
                   {isExpense ? '' : '+'}₹{tx.amount.toLocaleString()}
                 </p>
                 <button
                   onClick={() => handleDelete(tx.id)}
-                  className="text-slate-300 hover:text-rose-500 active:scale-75 transition-all"
+                  className={`p-1.5 rounded-lg transition-all active:scale-75 ${subtle} hover:text-rose-500 hover:bg-rose-50`}
                 >
-                  <Trash2 size={16} />
+                  <Trash2 size={14} />
                 </button>
               </div>
             </div>
@@ -150,7 +159,7 @@ export default function LogTab({ isDarkMode, transactions, categories, setTransa
         })}
 
         {filteredTransactions.length === 0 && (
-          <div className="text-center py-20 text-slate-400 font-black uppercase tracking-widest text-[10px] italic">
+          <div className={`text-center py-16 text-[10px] font-bold uppercase tracking-widest ${subtle}`}>
             No records found
           </div>
         )}

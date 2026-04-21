@@ -1,19 +1,24 @@
 @import "tailwindcss";
 
-/* 1. Prevent text selection and blue tap highlights */
-* {
+@theme {
+  --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --color-primary: #2563eb;
+  --color-primary-light: #3b82f6;
+  --color-primary-dark: #1d4ed8;
+  --color-navy: #0f172a;
+  --color-navy-mid: #1e293b;
+  --color-navy-surface: #0d1a2e;
+}
+
+/* Base font application */
+*, *::before, *::after {
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
 }
 
 html, body {
-  /* 2. Lock the viewport so it doesn't bounce around.
-        FIX #7: Removed `position: fixed` and `width: 100%` — these are not
-        needed since overflow:hidden already prevents body scroll, and
-        position:fixed on body breaks the Android soft keyboard. When the
-        virtual keyboard opens, Android resizes the viewport; position:fixed
-        suppresses that resize and causes the keyboard to permanently overlap
-        modal input fields with no way to scroll past it. */
+  /* Lock viewport — FIX #7: no position:fixed on body (breaks Android keyboard) */
   height: 100%;
   overflow: hidden;
 }
@@ -21,15 +26,112 @@ html, body {
 #root {
   height: 100%;
   overflow-y: auto;
-  /* 3. Smooth scrolling for iOS */
   -webkit-overflow-scrolling: touch;
 }
 
-/* 4. The Bottom Sheet Animation */
+/* ── Scrollbar Hide ────────────────────────────── */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* ── Bottom Sheet Slide-Up ─────────────────────── */
 @keyframes slideUp {
-  from { transform: translateY(100%); }
-  to   { transform: translateY(0); }
+  from { transform: translateY(100%); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
 }
 .animate-slide-up {
-  animation: slideUp 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  animation: slideUp 0.38s cubic-bezier(0.16, 1, 0.3, 1);
 }
+
+/* ── SVG Progress Ring ─────────────────────────── */
+.progress-ring-circle {
+  transition: stroke-dashoffset 1.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ── Tactile Button Feedback ───────────────────── */
+.btn-press {
+  transition: transform 0.1s cubic-bezier(0.4, 0, 0.2, 1),
+              box-shadow 0.15s ease;
+}
+.btn-press:active { transform: scale(0.93); }
+
+/* ── Shimmer / Loading Effect ──────────────────── */
+@keyframes shimmer {
+  0%   { background-position: -200% center; }
+  100% { background-position:  200% center; }
+}
+.shimmer-btn {
+  background: linear-gradient(90deg, #2563eb 25%, #3b82f6 50%, #2563eb 75%);
+  background-size: 200% auto;
+  animation: shimmer 3s linear infinite;
+}
+
+/* ── Fade In Animation ─────────────────────────── */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.fade-in {
+  animation: fadeIn 0.3s ease forwards;
+}
+
+/* ════════════════════════════════════════════════
+   MOBILE HARDENING — iOS & Android
+   ════════════════════════════════════════════════ */
+
+/* iOS Safari 100vh bug: fills actual visible area, not the full document. */
+.h-screen-safe {
+  height: 100vh;
+  height: -webkit-fill-available;
+  height: 100dvh;
+}
+
+/* Bottom nav: pad below content for iOS home indicator.
+   env(safe-area-inset-bottom) ≈ 34px on Face ID iPhones, 0 elsewhere. */
+.nav-safe {
+  padding-bottom: max(2rem, calc(0.5rem + env(safe-area-inset-bottom)));
+  padding-top: 0.625rem;
+}
+
+/* FAB: clears the nav bar + safe area */
+.fab-safe {
+  bottom: max(6rem, calc(4.5rem + env(safe-area-inset-bottom)));
+}
+
+/* Modal sheet: scrollable, leaves room for soft keyboard on Android.
+   dvh = dynamic viewport height (shrinks when keyboard opens).
+   IMPORTANT: fallback (vh) must come FIRST — the last valid value wins in CSS.
+   Browsers that support dvh will override the vh fallback with the smaller value. */
+.modal-sheet {
+  max-height: 92vh;   /* fallback for older browsers */
+  max-height: 92dvh;  /* overrides in Chrome 108+, Safari 15.4+ — shrinks with keyboard */
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Minimum touch target — Apple HIG & Material Design: 44×44 pt/dp */
+.touch-target {
+  min-width: 44px;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Scrollable content: ensure main scroll area accounts for nav + FAB */
+.main-scroll-pad {
+  padding-bottom: max(10rem, calc(8rem + env(safe-area-inset-bottom)));
+}
+
+/* Header: respect iOS notch / Dynamic Island / Android status bar.
+   env(safe-area-inset-top) ≈ 47px on iPhone 14 Pro, 0 on flat-screen Android. */
+.header-safe {
+  padding-top: max(2.25rem, calc(1.25rem + env(safe-area-inset-top)));
+  padding-bottom: 1.25rem;
+}
+
+/* Modal inner sheet: clear the iOS home indicator at the bottom */
+.modal-bottom-safe {
+  padding-bottom: max(3.5rem, calc(1.5rem + env(safe-area-inset-bottom)));
+}
+
+

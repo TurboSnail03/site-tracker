@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
 import { PlusCircle, LayoutDashboard, List, Settings, Sun, Moon, UploadCloud } from 'lucide-react'
 import SetupTab from './SetupTab'
 import TransactionModal from './TransactionModal'
@@ -127,20 +128,24 @@ export default function App() {
   }, [transactions])
 
   const appStyles = {
-    bg: isDarkMode ? 'bg-slate-950' : 'bg-[#FBEDD0]',
-    cardBg: isDarkMode ? 'bg-slate-900' : 'bg-white',
-    cardBorder: isDarkMode ? 'border-slate-800' : 'border-amber-100/50',
-    statBoxBg: isDarkMode ? 'bg-slate-800/60' : 'bg-amber-50/50',
-    shadow: isDarkMode ? 'shadow-black/50' : 'shadow-amber-900/10',
-    navBg: isDarkMode ? 'bg-slate-900/95 border-slate-800' : 'bg-[#FBEDD0]/95 border-amber-100/50',
-    text: isDarkMode ? 'text-slate-200' : 'text-slate-700',
-    textSubtle: isDarkMode ? 'text-slate-400' : 'text-amber-900/40',
-    fabBorder: isDarkMode ? 'border-slate-950' : 'border-[#FBEDD0]',
+    bg:          isDarkMode ? 'bg-[#0f172a]'                          : 'bg-slate-50',
+    cardBg:      isDarkMode ? 'bg-slate-900'                          : 'bg-white',
+    cardBorder:  isDarkMode ? 'border-slate-800/70'                   : 'border-slate-200/80',
+    statBoxBg:   isDarkMode ? 'bg-slate-800/50'                       : 'bg-slate-50',
+    shadow:      isDarkMode ? 'shadow-black/40'                       : 'shadow-slate-200',
+    navBg:       isDarkMode ? 'bg-slate-900/95 border-slate-800/60'   : 'bg-white/95 border-slate-200/60',
+    text:        isDarkMode ? 'text-slate-100'                        : 'text-slate-800',
+    textSubtle:  isDarkMode ? 'text-slate-500'                        : 'text-slate-400',
+    fabBorder:   isDarkMode ? 'border-[#0f172a]'                      : 'border-slate-50',
   }
+
+  const paidPct = globalStats.expense > 0
+    ? Math.min((globalStats.paid / globalStats.expense) * 100, 100)
+    : 0
 
   return (
     <div
-      className={`h-screen w-full flex flex-col transition-colors duration-300 overflow-hidden relative ${appStyles.bg} ${appStyles.text}`}
+      className={`h-screen-safe w-full flex flex-col transition-colors duration-300 overflow-hidden relative ${appStyles.bg} ${appStyles.text}`}
       onDragOver={(e) => { e.preventDefault(); setIsDragging(true) }}
       onDragEnter={(e) => { e.preventDefault(); setIsDragging(true) }}
       onDragLeave={(e) => { if (e.relatedTarget === null) setIsDragging(false) }}
@@ -150,116 +155,150 @@ export default function App() {
         processImport(e.dataTransfer.files[0])
       }}
     >
+      {/* Drag Overlay */}
       {isDragging && (
-        <div className="fixed inset-0 z-[200] bg-blue-600/90 backdrop-blur-md flex flex-col items-center justify-center text-white p-10 pointer-events-none">
-          <UploadCloud size={64} className="mb-4 animate-bounce" />
-          <h2 className="text-3xl font-black italic uppercase tracking-tighter">Drop to Sync</h2>
+        <div className="fixed inset-0 z-[200] bg-blue-600/95 backdrop-blur-xl flex flex-col items-center justify-center text-white p-10 pointer-events-none">
+          <div className="w-20 h-20 rounded-3xl bg-white/20 flex items-center justify-center mb-6 animate-bounce">
+            <UploadCloud size={40} />
+          </div>
+          <h2 className="text-3xl font-black tracking-tight">Drop to Import</h2>
+          <p className="text-sm text-blue-200 mt-2 font-medium tracking-wide">Release to sync your backup file</p>
         </div>
       )}
 
-      <header className="bg-slate-900 text-white p-5 pt-8 flex justify-between items-center shrink-0 shadow-2xl z-40">
+      {/* Header — header-safe pads around notch/Dynamic Island/status bar */}
+      <header className="header-safe bg-gradient-to-br from-slate-900 via-slate-900 to-slate-800 text-white px-5 flex justify-between items-center shrink-0 shadow-xl shadow-black/25 z-40">
         <div>
-          <h1 className="text-xl font-black tracking-tighter italic uppercase leading-none">
-            SITE<span className="text-blue-500">TRACKER</span>
+          <h1 className="text-xl font-black tracking-tight leading-none">
+            SITE<span className="text-blue-400">TRACKER</span>
           </h1>
-          <p className="text-[10px] text-blue-400 font-black uppercase tracking-[0.2em] mt-1.5">
-            {activeProject}
-          </p>
+          <div className="flex items-center gap-2 mt-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]" />
+            <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-[0.25em]">
+              {activeProject}
+            </p>
+          </div>
         </div>
         <button
           onClick={() => setIsDarkMode(!isDarkMode)}
-          className="p-2.5 rounded-2xl bg-slate-800 border border-slate-700 active:scale-90 transition-transform"
+          className="touch-target rounded-xl bg-slate-800/80 border border-slate-700/50 hover:bg-slate-700 active:scale-90 transition-all"
         >
           {isDarkMode
-            ? <Sun size={20} className="text-yellow-400" />
-            : <Moon size={20} className="text-blue-300" />}
+            ? <Sun  size={18} className="text-yellow-400" />
+            : <Moon size={18} className="text-blue-300" />}
         </button>
       </header>
 
+      {/* Main Content with AnimatePresence tab transitions */}
       <main className="flex-1 overflow-y-auto no-scrollbar">
-        <div className="max-w-md mx-auto p-4 pb-40">
-          {activeTab === 'dashboard' && (
-            <>
-              <div className={`rounded-[2.5rem] p-8 shadow-2xl border mb-8 relative transition-colors duration-300 ${appStyles.cardBg} ${appStyles.cardBorder} ${appStyles.shadow}`}>
-                <p className={`text-[10px] font-black uppercase tracking-[0.2em] mb-1 ${appStyles.textSubtle}`}>
-                  Balance Due
-                </p>
-                <h2 className="text-5xl font-black text-rose-500 tracking-tighter mb-10">
-                  ₹{globalStats.remaining.toLocaleString()}
-                </h2>
-                <div className={`grid grid-cols-2 gap-4 mt-8 pt-6 border-t ${appStyles.cardBorder}`}>
-                  <div className={`p-4 rounded-3xl ${appStyles.statBoxBg}`}>
-                    <p className={`text-[9px] font-black uppercase mb-1 opacity-60 ${appStyles.textSubtle}`}>
-                      Total Cost
-                    </p>
-                    <p className={`font-black ${appStyles.text}`}>
-                      ₹{globalStats.expense.toLocaleString()}
-                    </p>
-                  </div>
-                  <div className={`p-4 rounded-3xl ${appStyles.statBoxBg} border border-emerald-100/20`}>
-                    <p className="text-[9px] font-black text-emerald-600 uppercase mb-1 opacity-80">
-                      Total Paid
-                    </p>
-                    <p className="font-black text-emerald-600">
-                      ₹{globalStats.paid.toLocaleString()}
-                    </p>
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div
+            key={activeTab}
+            initial={{ opacity: 0, y: 14 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
+            className="max-w-md mx-auto p-4 main-scroll-pad"
+          >
+            {activeTab === 'dashboard' && (
+              <>
+                {/* Hero Balance Card */}
+                <div className={`rounded-2xl p-5 shadow-lg border mb-5 relative transition-colors duration-300 ${appStyles.cardBg} ${appStyles.cardBorder}`}>
+                  <p className={`text-[10px] font-semibold uppercase tracking-[0.25em] mb-1 ${appStyles.textSubtle}`}>
+                    Balance Due
+                  </p>
+                  <h2 className="text-5xl font-black text-rose-500 tracking-tighter leading-none mt-1">
+                    ₹{globalStats.remaining.toLocaleString()}
+                  </h2>
+
+                  {/* Overall progress bar */}
+                  {globalStats.expense > 0 && (
+                    <div className={`mt-4 h-1 rounded-full overflow-hidden ${isDarkMode ? 'bg-slate-800' : 'bg-slate-100'}`}>
+                      <div
+                        className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 rounded-full transition-all duration-1000"
+                        style={{ width: `${paidPct}%` }}
+                      />
+                    </div>
+                  )}
+
+                  <div className={`grid grid-cols-2 gap-3 mt-4 pt-4 border-t ${appStyles.cardBorder}`}>
+                    <div className={`p-3 rounded-xl ${appStyles.statBoxBg}`}>
+                      <p className={`text-[9px] font-semibold uppercase tracking-widest mb-1 ${appStyles.textSubtle}`}>
+                        Total Cost
+                      </p>
+                      <p className={`font-black text-sm ${appStyles.text}`}>
+                        ₹{globalStats.expense.toLocaleString()}
+                      </p>
+                    </div>
+                    <div className={`p-3 rounded-xl ${appStyles.statBoxBg} border border-emerald-500/10`}>
+                      <p className="text-[9px] font-semibold text-emerald-500 uppercase tracking-widest mb-1">
+                        Total Paid
+                      </p>
+                      <p className="font-black text-sm text-emerald-500">
+                        ₹{globalStats.paid.toLocaleString()}
+                      </p>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <DashboardTab
+                <DashboardTab
+                  isDarkMode={isDarkMode}
+                  transactions={transactions}
+                  categories={categories}
+                  onCardClick={(id, amount = '', type = 'payment') => {
+                    setSelectedCatId(id)
+                    setModalAmount(amount)
+                    setModalType(type)
+                    setIsModalOpen(true)
+                  }}
+                />
+              </>
+            )}
+
+            {activeTab === 'log' && (
+              <LogTab
                 isDarkMode={isDarkMode}
                 transactions={transactions}
                 categories={categories}
-                onCardClick={(id, amount = '', type = 'payment') => {
-                  setSelectedCatId(id)
-                  setModalAmount(amount)
-                  setModalType(type)
-                  setIsModalOpen(true)
-                }}
+                setTransactions={setTransactions}
               />
-            </>
-          )}
+            )}
 
-          {activeTab === 'log' && (
-            <LogTab
-              isDarkMode={isDarkMode}
-              transactions={transactions}
-              categories={categories}
-              setTransactions={setTransactions}
-            />
-          )}
-
-          {activeTab === 'setup' && (
-            <SetupTab
-              isDarkMode={isDarkMode}
-              categories={categories}
-              setCategories={setCategories}
-              transactions={transactions}
-              setTransactions={setTransactions}
-              processImport={processImport}
-              activeProject={activeProject}
-              switchProject={handleProjectSwitch}
-              renameProject={handleProjectRename}
-            />
-          )}
-        </div>
+            {activeTab === 'setup' && (
+              <SetupTab
+                isDarkMode={isDarkMode}
+                categories={categories}
+                setCategories={setCategories}
+                transactions={transactions}
+                setTransactions={setTransactions}
+                processImport={processImport}
+                activeProject={activeProject}
+                switchProject={handleProjectSwitch}
+                renameProject={handleProjectRename}
+              />
+            )}
+          </motion.div>
+        </AnimatePresence>
       </main>
 
-      {/* FIX #9: Corrected shadow value — was missing 'px' unit (40 → 40px) */}
-      <button
+      {/* FAB — Add Transaction */}
+      <motion.button
         onClick={() => {
           setSelectedCatId('')
           setModalAmount('')
           setModalType('expense')
           setIsModalOpen(true)
         }}
-        className={`fixed bottom-28 right-6 bg-blue-600 text-white w-16 h-16 rounded-[2.2rem] shadow-[0_15px_40px_rgba(37,99,235,0.4)] flex items-center justify-center active:scale-75 transition-all z-50 border-4 ${appStyles.fabBorder}`}
+        whileHover={{ scale: 1.07 }}
+        whileTap={{ scale: 0.88 }}
+        transition={{ type: 'spring', stiffness: 400, damping: 20 }}
+        className={`fab-safe fixed right-5 bg-blue-600 text-white w-[60px] h-[60px] rounded-2xl shadow-[0_8px_30px_rgba(37,99,235,0.55)] flex items-center justify-center z-50 border-4 ${appStyles.fabBorder}`}
       >
-        <PlusCircle size={32} strokeWidth={2.5} />
-      </button>
+        <PlusCircle size={28} strokeWidth={2.5} />
+      </motion.button>
 
-      <nav className={`fixed bottom-0 w-full backdrop-blur-xl flex justify-around p-4 pb-10 z-40 shadow-[0_-10px_40px_rgba(139,69,19,0.05)] transition-colors duration-300 ${appStyles.navBg}`}>
+      {/* Bottom Navigation */}
+      <nav className={`nav-safe fixed bottom-0 w-full backdrop-blur-2xl flex justify-around px-4 z-40 border-t transition-colors duration-300 ${appStyles.navBg}`}>
         {[
           { id: 'dashboard', icon: LayoutDashboard, label: 'Stats' },
           { id: 'log',       icon: List,            label: 'Log'   },
@@ -268,12 +307,23 @@ export default function App() {
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`flex flex-col items-center gap-1.5 px-6 py-1 rounded-2xl transition-all ${
-              activeTab === tab.id ? 'text-blue-600' : 'text-slate-400'
-            }`}
+            className="relative flex flex-col items-center gap-1 px-7 py-3 min-h-[44px]"
           >
-            <tab.icon size={22} strokeWidth={activeTab === tab.id ? 3 : 2} />
-            <span className="text-[9px] font-black uppercase tracking-widest">{tab.label}</span>
+            {activeTab === tab.id && (
+              <motion.div
+                layoutId="nav-pill"
+                className="absolute inset-0 bg-blue-600/10 rounded-xl"
+                transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+              />
+            )}
+            <tab.icon
+              size={20}
+              strokeWidth={activeTab === tab.id ? 2.5 : 1.75}
+              className={`relative z-10 transition-colors duration-200 ${activeTab === tab.id ? 'text-blue-600' : appStyles.textSubtle}`}
+            />
+            <span className={`relative z-10 text-[9px] font-bold uppercase tracking-widest transition-colors duration-200 ${activeTab === tab.id ? 'text-blue-600' : appStyles.textSubtle}`}>
+              {tab.label}
+            </span>
           </button>
         ))}
       </nav>

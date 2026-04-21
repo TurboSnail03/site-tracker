@@ -1,6 +1,49 @@
 import { useMemo } from 'react'
 
+// ── SVG Progress Ring ──────────────────────────────────────────────────────
+// Pure presentational — no state, no side-effects.
+// Thin stroke (3px), muted track behind active progress arc.
+function ProgressRing({ percent, color, label, isDarkMode }) {
+  const r        = 22
+  const circ     = 2 * Math.PI * r
+  const offset   = circ * (1 - Math.min(percent, 100) / 100)
+  const trackClr = isDarkMode ? '#1e293b' : '#f1f5f9'
+
+  return (
+    <svg width="56" height="56" viewBox="0 0 56 56" className="shrink-0" aria-label={`${percent}% cleared`}>
+      {/* Track */}
+      <circle cx="28" cy="28" r={r} fill="none" stroke={trackClr} strokeWidth="3" />
+      {/* Progress arc */}
+      <circle
+        cx="28" cy="28" r={r}
+        fill="none"
+        stroke={color}
+        strokeWidth="3"
+        strokeLinecap="round"
+        strokeDasharray={circ}
+        strokeDashoffset={offset}
+        className="progress-ring-circle"
+        style={{ transform: 'rotate(-90deg)', transformOrigin: '28px 28px' }}
+      />
+      {/* Inner fill + label */}
+      <circle cx="28" cy="28" r="15" fill={`${color}18`} />
+      <text
+        x="28" y="29"
+        textAnchor="middle"
+        dominantBaseline="central"
+        fontSize="11"
+        fontWeight="800"
+        fontFamily="Inter, system-ui, sans-serif"
+        fill={color}
+      >
+        {label}
+      </text>
+    </svg>
+  )
+}
+
 export default function DashboardTab({ isDarkMode, transactions, categories, onCardClick }) {
+  // ── Data computation — untouched ──────────────────────────────────────────
   const materialData = useMemo(() => {
     const mats = {}
     Object.values(categories).forEach(cat => {
@@ -19,41 +62,55 @@ export default function DashboardTab({ isDarkMode, transactions, categories, onC
   const totalExpense = useMemo(() => {
     return materialData.reduce((sum, mat) => sum + mat.expense, 0)
   }, [materialData])
+  // ─────────────────────────────────────────────────────────────────────────
+
+  const card   = isDarkMode ? 'bg-slate-900 border-slate-800/70' : 'bg-white border-slate-200/80'
+  const subtle = isDarkMode ? 'text-slate-500' : 'text-slate-400'
 
   if (materialData.length === 0) return (
-    <div className={`text-center py-24 rounded-[3rem] border-2 border-dashed ${isDarkMode ? 'bg-slate-900/40 border-slate-800' : 'bg-white/40 border-amber-200/50'}`}>
-      <p className="text-[10px] font-black uppercase tracking-widest opacity-40 italic">No active logs</p>
+    <div className={`text-center py-20 rounded-2xl border-2 border-dashed ${
+      isDarkMode ? 'border-slate-800 bg-slate-900/30' : 'border-slate-200 bg-slate-50/60'
+    }`}>
+      <div className="w-12 h-12 rounded-2xl bg-blue-600/10 flex items-center justify-center mx-auto mb-3">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2" strokeLinecap="round">
+          <path d="M3 3h7l2 3H21a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/>
+        </svg>
+      </div>
+      <p className={`text-[10px] font-bold uppercase tracking-widest ${subtle}`}>No active logs</p>
+      <p className={`text-[9px] mt-1 ${subtle} opacity-60`}>Add a transaction to get started</p>
     </div>
   )
 
   return (
-    <div className="space-y-4">
-      
-      {/* Visual Cost Breakdown Chart */}
+    <div className="space-y-3">
+
+      {/* ── Cost Breakdown Bar Chart ─────────────────────────────────────── */}
       {totalExpense > 0 && (
-        <div className={`p-5 rounded-[2rem] border shadow-sm mb-6 ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-amber-100'}`}>
-          <h3 className={`text-[10px] font-black uppercase tracking-[0.3em] mb-4 italic opacity-40`}>Cost Breakdown</h3>
-          
-          {/* Segmented Bar */}
-          <div className={`h-4 w-full flex rounded-full overflow-hidden mb-4 shadow-inner ${isDarkMode ? 'bg-slate-800' : 'bg-amber-50'}`}>
+        <div className={`p-5 rounded-2xl border shadow-sm ${card}`}>
+          <h3 className={`text-[10px] font-bold uppercase tracking-[0.3em] mb-4 ${subtle}`}>
+            Cost Breakdown
+          </h3>
+
+          {/* Segmented bar */}
+          <div className={`h-3 w-full flex rounded-full overflow-hidden mb-4 ${isDarkMode ? 'bg-slate-800' : 'bg-slate-100'}`}>
             {materialData.map(mat => (
-              <div 
-                key={`bar-${mat.id}`} 
-                style={{ width: `${(mat.expense / totalExpense) * 100}%`, backgroundColor: mat.color }} 
-                className="h-full transition-all duration-1000 hover:opacity-80"
+              <div
+                key={`bar-${mat.id}`}
+                style={{ width: `${(mat.expense / totalExpense) * 100}%`, backgroundColor: mat.color }}
+                className="h-full transition-all duration-1000 hover:brightness-110"
               />
             ))}
           </div>
-          
-          {/* Legend (Top 4 Materials) */}
+
+          {/* Legend */}
           <div className="flex flex-wrap gap-x-4 gap-y-2">
-            {materialData.slice(0, 4).map(mat => {
+            {materialData.slice(0, 5).map(mat => {
               const pct = Math.round((mat.expense / totalExpense) * 100)
               return (
                 <div key={`legend-${mat.id}`} className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full shadow-sm" style={{ backgroundColor: mat.color }}></span>
-                  <span className={`text-[9px] font-black uppercase tracking-widest ${isDarkMode ? 'text-slate-300' : 'text-slate-600'}`}>
-                    {mat.name} <span className="opacity-50">({pct}%)</span>
+                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: mat.color }} />
+                  <span className={`text-[9px] font-semibold uppercase tracking-wide ${isDarkMode ? 'text-slate-300' : 'text-slate-600'}`}>
+                    {mat.name} <span className="opacity-50">{pct}%</span>
                   </span>
                 </div>
               )
@@ -62,58 +119,73 @@ export default function DashboardTab({ isDarkMode, transactions, categories, onC
         </div>
       )}
 
-      {/* Existing Material Debts List */}
-      <h3 className={`text-[10px] font-black uppercase tracking-[0.3em] ml-2 italic opacity-40`}>Material Debts</h3>
+      {/* ── Section Header ───────────────────────────────────────────────── */}
+      <h3 className={`text-[10px] font-bold uppercase tracking-[0.3em] ml-1 pt-1 ${subtle}`}>
+        Material Debts
+      </h3>
+
+      {/* ── Material Cards ───────────────────────────────────────────────── */}
       {materialData.map(mat => {
         const percentPaid = Math.min(Math.round((mat.paid / mat.expense) * 100), 100)
         return (
-          <div 
-            key={mat.id} 
-            // The main card click functions exactly as it used to (opens standard log)
+          <div
+            key={mat.id}
             onClick={() => onCardClick(mat.id)}
-            className={`group cursor-pointer relative w-full text-left rounded-[2rem] overflow-hidden border transition-all active:scale-[0.98] shadow-sm ${
-              isDarkMode 
-                ? 'bg-slate-900 border-slate-800 shadow-black/20' 
-                : 'bg-white border-amber-100 shadow-amber-900/5'
+            className={`group cursor-pointer relative w-full text-left rounded-2xl overflow-hidden border transition-all active:scale-[0.98] shadow-sm ${
+              isDarkMode
+                ? 'bg-slate-900 border-slate-800/70 shadow-black/20 hover:border-slate-700'
+                : 'bg-white border-slate-200/80 shadow-slate-100 hover:border-slate-300 hover:shadow-md'
             }`}
           >
-            {/* Progress Background */}
-            <div 
-              className={`absolute inset-y-0 left-0 transition-all duration-1000 ${isDarkMode ? 'bg-emerald-500/10' : 'bg-emerald-500/5'}`} 
-              style={{ width: `${percentPaid}%` }} 
+            {/* Progress wash background */}
+            <div
+              className={`absolute inset-y-0 left-0 transition-all duration-1000 ${isDarkMode ? 'bg-emerald-500/8' : 'bg-emerald-500/5'}`}
+              style={{ width: `${percentPaid}%` }}
             />
-            {/* Progress Bottom Bar */}
-            <div 
-              className="absolute bottom-0 left-0 h-[3px] bg-emerald-500 transition-all duration-1000" 
-              style={{ width: `${percentPaid}%` }} 
+            {/* Progress bottom bar */}
+            <div
+              className="absolute bottom-0 left-0 h-[2px] bg-gradient-to-r from-emerald-500 to-emerald-400 transition-all duration-1000"
+              style={{ width: `${percentPaid}%` }}
             />
-            
-            <div className="relative p-5 flex justify-between items-center">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-white font-black text-xl shadow-lg" style={{ backgroundColor: mat.color }}>
-                  {mat.name.charAt(0)}
-                </div>
-                <div>
-                  <p className={`font-black uppercase tracking-tight ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>{mat.name}</p>
-                  <p className="text-[9px] text-emerald-600 font-black uppercase tracking-tighter">{percentPaid}% CLEARED</p>
+
+            <div className="relative p-4 flex justify-between items-center gap-3">
+              {/* Left: ring + name */}
+              <div className="flex items-center gap-3 min-w-0">
+                <ProgressRing
+                  percent={percentPaid}
+                  color={mat.color}
+                  label={mat.name.charAt(0).toUpperCase()}
+                  isDarkMode={isDarkMode}
+                />
+                <div className="min-w-0">
+                  <p className={`font-bold text-sm uppercase tracking-tight truncate ${isDarkMode ? 'text-slate-100' : 'text-slate-800'}`}>
+                    {mat.name}
+                  </p>
+                  <p className="text-[9px] text-emerald-500 font-semibold uppercase tracking-wide mt-0.5">
+                    {percentPaid}% cleared
+                  </p>
                 </div>
               </div>
-              <div className="text-right flex flex-col items-end gap-1.5">
-                <p className="text-xl font-black text-rose-500 tracking-tighter">₹{mat.remaining.toLocaleString()}</p>
-                
-                {/* NEW: Dedicated separate button for settling up */}
+
+              {/* Right: amount + settle */}
+              <div className="text-right flex flex-col items-end gap-2 shrink-0">
+                <p className="text-lg font-black text-rose-500 tracking-tight">
+                  ₹{mat.remaining.toLocaleString()}
+                </p>
                 {mat.remaining > 0 ? (
-                  <button 
+                  <button
                     onClick={(e) => {
-                      e.stopPropagation(); // Stops the main card click from firing
-                      onCardClick(mat.id, mat.remaining, 'payment');
+                      e.stopPropagation()
+                      onCardClick(mat.id, mat.remaining, 'payment')
                     }}
-                    className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-[8px] font-black uppercase tracking-widest shadow-md active:scale-90 transition-all"
+                    className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-[8px] font-bold uppercase tracking-widest shadow-md shadow-emerald-500/25 active:scale-90 transition-all"
                   >
                     Settle Up
                   </button>
                 ) : (
-                  <p className={`text-[8px] font-bold uppercase tracking-widest mt-0.5 opacity-40`}>All Cleared</p>
+                  <p className={`text-[8px] font-semibold uppercase tracking-widest opacity-40 ${subtle}`}>
+                    All Cleared
+                  </p>
                 )}
               </div>
             </div>
