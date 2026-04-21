@@ -5,71 +5,110 @@ import TransactionModal from './TransactionModal'
 import LogTab from './LogTab'
 import DashboardTab from './DashboardTab'
 
-export default function App() {
-  const [activeProject, setActiveProject] = useState(() => localStorage.getItem('siteActiveProject') || 'Site A')
+// FIX #4: Moved outside component — no longer recreated on every render
+const getSafeData = (key, fallback) => {
+  try {
+    const data = localStorage.getItem(key)
+    return data ? JSON.parse(data) : fallback
+  } catch (e) { return fallback }
+}
 
-  const [categories, setCategories] = useState(() => JSON.parse(localStorage.getItem(`siteCategories_${localStorage.getItem('siteActiveProject') || 'Site A'}`)) || {})
-  const [transactions, setTransactions] = useState(() => JSON.parse(localStorage.getItem(`siteTransactions_${localStorage.getItem('siteActiveProject') || 'Site A'}`)) || [])
-  
+export default function App() {
+  // 1. PROJECT POINTER
+  const [activeProject, setActiveProject] = useState(
+    () => localStorage.getItem('siteActiveProject') || 'Site A'
+  )
+
+  // 2. DATA STATES (Scoped to active project)
+  const [categories, setCategories] = useState(
+    () => getSafeData(`siteCategories_${localStorage.getItem('siteActiveProject') || 'Site A'}`, {})
+  )
+  const [transactions, setTransactions] = useState(
+    () => getSafeData(`siteTransactions_${localStorage.getItem('siteActiveProject') || 'Site A'}`, [])
+  )
+
   const [activeTab, setActiveTab] = useState('dashboard')
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [selectedCatId, setSelectedCatId] = useState('')
   const [modalAmount, setModalAmount] = useState('')
   const [modalType, setModalType] = useState('expense')
-  
-  const [isDarkMode, setIsDarkMode] = useState(() => {
-    const saved = localStorage.getItem('siteTheme')
-    return saved ? saved === 'dark' : true 
-  })
 
+  const [isDarkMode, setIsDarkMode] = useState(
+    () => localStorage.getItem('siteTheme') === 'dark'
+  )
   const [isDragging, setIsDragging] = useState(false)
 
-  useEffect(() => localStorage.setItem(`siteCategories_${activeProject}`, JSON.stringify(categories)), [categories, activeProject])
-  useEffect(() => localStorage.setItem(`siteTransactions_${activeProject}`, JSON.stringify(transactions)), [transactions, activeProject])
-  
+  // FIX #1: Sync effect only handles incremental data changes — NOT project switching.
+  // activeProject is intentionally excluded from the dependency array here.
+  // Project switching and renaming persist data themselves before mutating state.
+  useEffect(() => {
+    localStorage.setItem(`siteCategories_${activeProject}`, JSON.stringify(categories))
+    localStorage.setItem(`siteTransactions_${activeProject}`, JSON.stringify(transactions))
+  }, [categories, transactions]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Theme Engine
   useEffect(() => {
     const root = window.document.documentElement
-    if (isDarkMode) root.classList.add('dark')
-    else root.classList.remove('dark')
+    isDarkMode ? root.classList.add('dark') : root.classList.remove('dark')
     localStorage.setItem('siteTheme', isDarkMode ? 'dark' : 'light')
   }, [isDarkMode])
 
+  // FIX #1: handleProjectSwitch now explicitly saves current project data BEFORE
+  // switching state, eliminating the race condition where the sync useEffect
+  // could fire mid-switch with a mismatched activeProject/categories pair.
   const handleProjectSwitch = (projectName) => {
-    setActiveProject(projectName)
+    // Persist current project first
+    localStorage.setItem(`siteCategories_${activeProject}`, JSON.stringify(categories))
+    localStorage.setItem(`siteTransactions_${activeProject}`, JSON.stringify(transactions))
+
+    // Now load and apply the new project
+    const newCats = getSafeData(`siteCategories_${projectName}`, {})
+    const newTxs  = getSafeData(`siteTransactions_${projectName}`, [])
+
     localStorage.setItem('siteActiveProject', projectName)
-    setCategories(JSON.parse(localStorage.getItem(`siteCategories_${projectName}`)) || {})
-    setTransactions(JSON.parse(localStorage.getItem(`siteTransactions_${projectName}`)) || [])
+    setActiveProject(projectName)
+    setCategories(newCats)
+    setTransactions(newTxs)
   }
 
-  // NEW: Rename Engine
+  // FIX #1 + FIX #2: Rename now guards against duplicate project names (silent
+  // overwrite) and explicitly persists data rather than relying on the effect.
   const handleProjectRename = (oldName, newName) => {
-    if (!newName || newName.trim() === '' || oldName === newName) return;
-    const cleanNewName = newName.trim();
+    if (!newName || newName.trim() === '' || oldName === newName) return
+    const cleanNewName = newName.trim()
 
-    // Move data in localStorage
-    localStorage.setItem(`siteCategories_${cleanNewName}`, JSON.stringify(categories));
-    localStorage.setItem(`siteTransactions_${cleanNewName}`, JSON.stringify(transactions));
+    // FIX #2: Conflict guard — prevents silent overwrite of existing project
+    if (localStorage.getItem(`siteCategories_${cleanNewName}`) !== null) {
+      alert(`A project named "${cleanNewName}" already exists. Choose a different name.`)
+      return
+    }
 
-    // Delete old keys
-    localStorage.removeItem(`siteCategories_${oldName}`);
-    localStorage.removeItem(`siteTransactions_${oldName}`);
+    // 1. Write current in-memory data to the new key
+    localStorage.setItem(`siteCategories_${cleanNewName}`, JSON.stringify(categories))
+    localStorage.setItem(`siteTransactions_${cleanNewName}`, JSON.stringify(transactions))
 
-    // Update state and active project pointer
-    setActiveProject(cleanNewName);
-    localStorage.setItem('siteActiveProject', cleanNewName);
-  };
+    // 2. Clear old keys
+    localStorage.removeItem(`siteCategories_${oldName}`)
+    localStorage.removeItem(`siteTransactions_${oldName}`)
+
+    // 3. Update pointer and React state
+    localStorage.setItem('siteActiveProject', cleanNewName)
+    setActiveProject(cleanNewName)
+  }
 
   const processImport = (file) => {
+    if (!file) return
     const reader = new FileReader()
     reader.onload = (e) => {
       try {
         const parsed = JSON.parse(e.target.result)
         if (parsed.categories && parsed.transactions) {
-          if (window.confirm("Overwrite current data?")) {
-            setCategories(parsed.categories); setTransactions(parsed.transactions);
+          if (window.confirm(`Overwrite data for project: ${activeProject}?`)) {
+            setCategories(parsed.categories)
+            setTransactions(parsed.transactions)
           }
         }
-      } catch (err) { alert("Invalid file.") }
+      } catch (err) { alert('Invalid backup file.') }
     }
     reader.readAsText(file)
   }
@@ -81,10 +120,9 @@ export default function App() {
   }
 
   const globalStats = useMemo(() => {
-    let expense = 0, paid = 0;
-    transactions.forEach(tx => {
-      tx.type === 'expense' ? expense += tx.amount : paid += tx.amount
-    })
+    let expense = 0, paid = 0
+    const txList = Array.isArray(transactions) ? transactions : []
+    txList.forEach(tx => tx.type === 'expense' ? expense += tx.amount : paid += tx.amount)
     return { expense, paid, remaining: Math.max(0, expense - paid) }
   }, [transactions])
 
@@ -101,26 +139,40 @@ export default function App() {
   }
 
   return (
-    <div 
-      className={`h-screen flex flex-col transition-colors duration-300 overflow-hidden relative ${appStyles.bg} ${appStyles.text}`}
-      onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-      onDragLeave={() => setIsDragging(false)}
-      onDrop={(e) => { e.preventDefault(); setIsDragging(false); processImport(e.dataTransfer.files[0]); }}
+    <div
+      className={`h-screen w-full flex flex-col transition-colors duration-300 overflow-hidden relative ${appStyles.bg} ${appStyles.text}`}
+      onDragOver={(e) => { e.preventDefault(); setIsDragging(true) }}
+      onDragEnter={(e) => { e.preventDefault(); setIsDragging(true) }}
+      onDragLeave={(e) => { if (e.relatedTarget === null) setIsDragging(false) }}
+      onDrop={(e) => {
+        e.preventDefault()
+        setIsDragging(false)
+        processImport(e.dataTransfer.files[0])
+      }}
     >
       {isDragging && (
-        <div className="fixed inset-0 z-[200] bg-blue-600/90 backdrop-blur-md flex flex-col items-center justify-center text-white font-black p-10 text-center">
+        <div className="fixed inset-0 z-[200] bg-blue-600/90 backdrop-blur-md flex flex-col items-center justify-center text-white p-10 pointer-events-none">
           <UploadCloud size={64} className="mb-4 animate-bounce" />
-          <h2 className="text-3xl italic uppercase tracking-tighter">Drop to Sync</h2>
+          <h2 className="text-3xl font-black italic uppercase tracking-tighter">Drop to Sync</h2>
         </div>
       )}
 
       <header className="bg-slate-900 text-white p-5 pt-8 flex justify-between items-center shrink-0 shadow-2xl z-40">
         <div>
-          <h1 className="text-xl font-black tracking-tighter italic uppercase">SITE<span className="text-blue-500">TRACKER</span></h1>
-          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{activeProject}</p>
+          <h1 className="text-xl font-black tracking-tighter italic uppercase leading-none">
+            SITE<span className="text-blue-500">TRACKER</span>
+          </h1>
+          <p className="text-[10px] text-blue-400 font-black uppercase tracking-[0.2em] mt-1.5">
+            {activeProject}
+          </p>
         </div>
-        <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-2.5 rounded-2xl bg-slate-800 border border-slate-700 active:scale-90 transition-transform">
-          {isDarkMode ? <Sun size={20} className="text-yellow-400" /> : <Moon size={20} className="text-blue-300" />}
+        <button
+          onClick={() => setIsDarkMode(!isDarkMode)}
+          className="p-2.5 rounded-2xl bg-slate-800 border border-slate-700 active:scale-90 transition-transform"
+        >
+          {isDarkMode
+            ? <Sun size={20} className="text-yellow-400" />
+            : <Moon size={20} className="text-blue-300" />}
         </button>
       </header>
 
@@ -128,84 +180,114 @@ export default function App() {
         <div className="max-w-md mx-auto p-4 pb-40">
           {activeTab === 'dashboard' && (
             <>
-              <div className={`rounded-[2.5rem] p-8 shadow-2xl border mb-8 relative overflow-hidden transition-colors duration-300 ${appStyles.cardBg} ${appStyles.cardBorder} ${appStyles.shadow}`}>
-                <p className={`text-[10px] font-black uppercase tracking-[0.2em] mb-1 ${appStyles.textSubtle}`}>Balance Due</p>
-                <h2 className={`text-5xl font-black text-rose-500 ${isDarkMode ? 'dark:text-rose-400' : ''} tracking-tighter`}>₹{globalStats.remaining.toLocaleString()}</h2>
-                
+              <div className={`rounded-[2.5rem] p-8 shadow-2xl border mb-8 relative transition-colors duration-300 ${appStyles.cardBg} ${appStyles.cardBorder} ${appStyles.shadow}`}>
+                <p className={`text-[10px] font-black uppercase tracking-[0.2em] mb-1 ${appStyles.textSubtle}`}>
+                  Balance Due
+                </p>
+                <h2 className="text-5xl font-black text-rose-500 tracking-tighter mb-10">
+                  ₹{globalStats.remaining.toLocaleString()}
+                </h2>
                 <div className={`grid grid-cols-2 gap-4 mt-8 pt-6 border-t ${appStyles.cardBorder}`}>
                   <div className={`p-4 rounded-3xl ${appStyles.statBoxBg}`}>
-                    <p className={`text-[9px] font-black uppercase mb-1 opacity-60 dark:opacity-80 ${appStyles.textSubtle}`}>Total Cost</p>
-                    <p className={`font-black ${appStyles.text}`}>₹{globalStats.expense.toLocaleString()}</p>
+                    <p className={`text-[9px] font-black uppercase mb-1 opacity-60 ${appStyles.textSubtle}`}>
+                      Total Cost
+                    </p>
+                    <p className={`font-black ${appStyles.text}`}>
+                      ₹{globalStats.expense.toLocaleString()}
+                    </p>
                   </div>
-                  <div className={`p-4 rounded-3xl ${appStyles.statBoxBg} border border-emerald-100/20 dark:border-emerald-900/20`}>
-                    <p className="text-[9px] font-black text-emerald-600 dark:text-emerald-400 uppercase mb-1 opacity-80">Total Paid</p>
-                    <p className="font-black text-emerald-600 dark:text-emerald-400">₹{globalStats.paid.toLocaleString()}</p>
+                  <div className={`p-4 rounded-3xl ${appStyles.statBoxBg} border border-emerald-100/20`}>
+                    <p className="text-[9px] font-black text-emerald-600 uppercase mb-1 opacity-80">
+                      Total Paid
+                    </p>
+                    <p className="font-black text-emerald-600">
+                      ₹{globalStats.paid.toLocaleString()}
+                    </p>
                   </div>
                 </div>
               </div>
 
-              <DashboardTab 
+              <DashboardTab
                 isDarkMode={isDarkMode}
-                transactions={transactions} 
-                categories={categories} 
-                onCardClick={(id, amount = '', type = 'payment') => { 
-                  setSelectedCatId(id); 
-                  setModalAmount(amount);
-                  setModalType(type);
-                  setIsModalOpen(true); 
-                }} 
+                transactions={transactions}
+                categories={categories}
+                onCardClick={(id, amount = '', type = 'payment') => {
+                  setSelectedCatId(id)
+                  setModalAmount(amount)
+                  setModalType(type)
+                  setIsModalOpen(true)
+                }}
               />
             </>
           )}
 
-          {activeTab === 'log' && <LogTab isDarkMode={isDarkMode} transactions={transactions} categories={categories} setTransactions={setTransactions} />}
-          
+          {activeTab === 'log' && (
+            <LogTab
+              isDarkMode={isDarkMode}
+              transactions={transactions}
+              categories={categories}
+              setTransactions={setTransactions}
+            />
+          )}
+
           {activeTab === 'setup' && (
-            <SetupTab 
-              isDarkMode={isDarkMode} 
-              categories={categories} 
-              setCategories={setCategories} 
-              transactions={transactions} 
-              setTransactions={setTransactions} 
-              processImport={processImport} 
+            <SetupTab
+              isDarkMode={isDarkMode}
+              categories={categories}
+              setCategories={setCategories}
+              transactions={transactions}
+              setTransactions={setTransactions}
+              processImport={processImport}
               activeProject={activeProject}
               switchProject={handleProjectSwitch}
-              renameProject={handleProjectRename} // NEW
+              renameProject={handleProjectRename}
             />
           )}
         </div>
       </main>
 
-      <button 
-        onClick={() => { setSelectedCatId(''); setModalAmount(''); setModalType('expense'); setIsModalOpen(true); }} 
-        className={`fixed bottom-28 right-6 bg-blue-600 text-white w-16 h-16 rounded-[2.2rem] shadow-[0_15px_40_rgba(37,99,235,0.4)] flex items-center justify-center active:scale-75 transition-all z-50 border-4 ${appStyles.fabBorder}`}
+      {/* FIX #9: Corrected shadow value — was missing 'px' unit (40 → 40px) */}
+      <button
+        onClick={() => {
+          setSelectedCatId('')
+          setModalAmount('')
+          setModalType('expense')
+          setIsModalOpen(true)
+        }}
+        className={`fixed bottom-28 right-6 bg-blue-600 text-white w-16 h-16 rounded-[2.2rem] shadow-[0_15px_40px_rgba(37,99,235,0.4)] flex items-center justify-center active:scale-75 transition-all z-50 border-4 ${appStyles.fabBorder}`}
       >
         <PlusCircle size={32} strokeWidth={2.5} />
       </button>
 
-      <nav className={`fixed bottom-0 w-full backdrop-blur-xl flex justify-around p-4 pb-10 z-40 shadow-[0_-10px_40_rgba(139,69,19,0.05)] transition-colors duration-300 ${appStyles.navBg}`}>
-        {[ 
-          {id: 'dashboard', icon: LayoutDashboard, label: 'Stats'}, 
-          {id: 'log', icon: List, label: 'Log'}, 
-          {id: 'setup', icon: Settings, label: 'Sync'} 
+      <nav className={`fixed bottom-0 w-full backdrop-blur-xl flex justify-around p-4 pb-10 z-40 shadow-[0_-10px_40px_rgba(139,69,19,0.05)] transition-colors duration-300 ${appStyles.navBg}`}>
+        {[
+          { id: 'dashboard', icon: LayoutDashboard, label: 'Stats' },
+          { id: 'log',       icon: List,            label: 'Log'   },
+          { id: 'setup',     icon: Settings,         label: 'Sync'  },
         ].map(tab => (
-          <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`flex flex-col items-center gap-1.5 px-6 py-1 rounded-2xl transition-all ${activeTab === tab.id ? 'text-blue-600' : 'text-slate-400'}`}>
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`flex flex-col items-center gap-1.5 px-6 py-1 rounded-2xl transition-all ${
+              activeTab === tab.id ? 'text-blue-600' : 'text-slate-400'
+            }`}
+          >
             <tab.icon size={22} strokeWidth={activeTab === tab.id ? 3 : 2} />
             <span className="text-[9px] font-black uppercase tracking-widest">{tab.label}</span>
           </button>
         ))}
       </nav>
 
-      <TransactionModal 
+      <TransactionModal
         isDarkMode={isDarkMode}
-        isOpen={isModalOpen} 
-        onClose={() => setIsModalOpen(false)} 
-        categories={categories} 
-        initialCatId={selectedCatId} 
-        initialAmount={modalAmount} 
-        initialType={modalType}     
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        categories={categories}
+        initialCatId={selectedCatId}
+        initialAmount={modalAmount}
+        initialType={modalType}
         onAddTransaction={handleAddTransaction}
-        transactions={transactions} 
+        transactions={transactions}
       />
     </div>
   )

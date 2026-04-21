@@ -7,11 +7,15 @@
 }
 
 html, body {
-  /* 2. Lock the viewport so it doesn't bounce around */
+  /* 2. Lock the viewport so it doesn't bounce around.
+        FIX #7: Removed `position: fixed` and `width: 100%` — these are not
+        needed since overflow:hidden already prevents body scroll, and
+        position:fixed on body breaks the Android soft keyboard. When the
+        virtual keyboard opens, Android resizes the viewport; position:fixed
+        suppresses that resize and causes the keyboard to permanently overlap
+        modal input fields with no way to scroll past it. */
   height: 100%;
   overflow: hidden;
-  position: fixed;
-  width: 100%;
 }
 
 #root {
@@ -24,7 +28,7 @@ html, body {
 /* 4. The Bottom Sheet Animation */
 @keyframes slideUp {
   from { transform: translateY(100%); }
-  to { transform: translateY(0); }
+  to   { transform: translateY(0); }
 }
 .animate-slide-up {
   animation: slideUp 0.3s cubic-bezier(0.4, 0, 0.2, 1);
