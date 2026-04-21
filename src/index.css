@@ -1,0 +1,31 @@
+@import "tailwindcss";
+
+/* 1. Prevent text selection and blue tap highlights */
+* {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+html, body {
+  /* 2. Lock the viewport so it doesn't bounce around */
+  height: 100%;
+  overflow: hidden;
+  position: fixed;
+  width: 100%;
+}
+
+#root {
+  height: 100%;
+  overflow-y: auto;
+  /* 3. Smooth scrolling for iOS */
+  -webkit-overflow-scrolling: touch;
+}
+
+/* 4. The Bottom Sheet Animation */
+@keyframes slideUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+.animate-slide-up {
+  animation: slideUp 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
