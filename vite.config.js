@@ -1,14 +1,17 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-import tailwindcss from '@tailwindcss/vite' // Added this back
+import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
   plugins: [
-    tailwindcss(), // Added this back
+    tailwindcss(),
     react(),
     VitePWA({
-      registerType: 'autoUpdate',
+      // Changed from 'autoUpdate' to 'prompt' so the onNeedRefresh callback
+      // in main.jsx actually fires. With 'autoUpdate', the SW bypasses the
+      // callback entirely and force-updates mid-session regardless.
+      registerType: 'prompt',
       includeAssets: ['favicon.svg', 'icons.svg'],
       manifest: {
         name: 'SiteTracker',
