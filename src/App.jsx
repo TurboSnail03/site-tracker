@@ -6,11 +6,20 @@ import LogTab from './LogTab'
 import DashboardTab from './DashboardTab'
 
 export default function App() {
-  const [categories, setCategories] = useState(() => JSON.parse(localStorage.getItem('siteCategories')) || {})
-  const [transactions, setTransactions] = useState(() => JSON.parse(localStorage.getItem('siteTransactions')) || [])
+  // NEW: Multi-site active project state
+  const [activeProject, setActiveProject] = useState(() => localStorage.getItem('siteActiveProject') || 'Site A')
+
+  // UPDATED: Storage keys now use the activeProject name
+  const [categories, setCategories] = useState(() => JSON.parse(localStorage.getItem(`siteCategories_${localStorage.getItem('siteActiveProject') || 'Site A'}`)) || {})
+  const [transactions, setTransactions] = useState(() => JSON.parse(localStorage.getItem(`siteTransactions_${localStorage.getItem('siteActiveProject') || 'Site A'}`)) || [])
+  
   const [activeTab, setActiveTab] = useState('dashboard')
+  
+  // UPDATED: Modal state now handles pre-filling amounts for the "Settle Up" feature
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [selectedCatId, setSelectedCatId] = useState('')
+  const [modalAmount, setModalAmount] = useState('')
+  const [modalType, setModalType] = useState('expense')
   
   const [isDarkMode, setIsDarkMode] = useState(() => {
     const saved = localStorage.getItem('siteTheme')
@@ -19,8 +28,9 @@ export default function App() {
 
   const [isDragging, setIsDragging] = useState(false)
 
-  useEffect(() => localStorage.setItem('siteCategories', JSON.stringify(categories)), [categories])
-  useEffect(() => localStorage.setItem('siteTransactions', JSON.stringify(transactions)), [transactions])
+  // UPDATED: Save data to the specific active project key
+  useEffect(() => localStorage.setItem(`siteCategories_${activeProject}`, JSON.stringify(categories)), [categories, activeProject])
+  useEffect(() => localStorage.setItem(`siteTransactions_${activeProject}`, JSON.stringify(transactions)), [transactions, activeProject])
   
   useEffect(() => {
     const root = window.document.documentElement
@@ -28,6 +38,14 @@ export default function App() {
     else root.classList.remove('dark')
     localStorage.setItem('siteTheme', isDarkMode ? 'dark' : 'light')
   }, [isDarkMode])
+
+  // NEW: Function to switch between projects and load their specific data
+  const handleProjectSwitch = (projectName) => {
+    setActiveProject(projectName)
+    localStorage.setItem('siteActiveProject', projectName)
+    setCategories(JSON.parse(localStorage.getItem(`siteCategories_${projectName}`)) || {})
+    setTransactions(JSON.parse(localStorage.getItem(`siteTransactions_${projectName}`)) || [])
+  }
 
   const processImport = (file) => {
     const reader = new FileReader()
@@ -85,7 +103,11 @@ export default function App() {
       )}
 
       <header className="bg-slate-900 text-white p-5 pt-8 flex justify-between items-center shrink-0 shadow-2xl z-40">
-        <h1 className="text-xl font-black tracking-tighter italic uppercase">SITE<span className="text-blue-500">TRACKER</span></h1>
+        <div>
+          <h1 className="text-xl font-black tracking-tighter italic uppercase">SITE<span className="text-blue-500">TRACKER</span></h1>
+          {/* NEW: Displays the active project name so you don't get confused */}
+          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{activeProject}</p>
+        </div>
         <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-2.5 rounded-2xl bg-slate-800 border border-slate-700 active:scale-90 transition-transform">
           {isDarkMode ? <Sun size={20} className="text-yellow-400" /> : <Moon size={20} className="text-blue-300" />}
         </button>
@@ -111,24 +133,42 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Added isDarkMode prop here */}
               <DashboardTab 
                 isDarkMode={isDarkMode}
                 transactions={transactions} 
                 categories={categories} 
-                onCardClick={(id) => { setSelectedCatId(id); setIsModalOpen(true); }} 
+                // UPDATED: Now receives the exact amount to settle up
+                onCardClick={(id, amount = '', type = 'payment') => { 
+                  setSelectedCatId(id); 
+                  setModalAmount(amount);
+                  setModalType(type);
+                  setIsModalOpen(true); 
+                }} 
               />
             </>
           )}
 
-          {/* Added isDarkMode prop here */}
           {activeTab === 'log' && <LogTab isDarkMode={isDarkMode} transactions={transactions} categories={categories} setTransactions={setTransactions} />}
-          {activeTab === 'setup' && <SetupTab isDarkMode={isDarkMode} categories={categories} setCategories={setCategories} transactions={transactions} setTransactions={setTransactions} processImport={processImport} />}
+          
+          {/* UPDATED: Passing the project switcher props */}
+          {activeTab === 'setup' && (
+            <SetupTab 
+              isDarkMode={isDarkMode} 
+              categories={categories} 
+              setCategories={setCategories} 
+              transactions={transactions} 
+              setTransactions={setTransactions} 
+              processImport={processImport} 
+              activeProject={activeProject}
+              switchProject={handleProjectSwitch}
+            />
+          )}
         </div>
       </main>
 
       <button 
-        onClick={() => { setSelectedCatId(''); setIsModalOpen(true); }} 
+        // UPDATED: Resets to an empty expense form when you click the main FAB
+        onClick={() => { setSelectedCatId(''); setModalAmount(''); setModalType('expense'); setIsModalOpen(true); }} 
         className={`fixed bottom-28 right-6 bg-blue-600 text-white w-16 h-16 rounded-[2.2rem] shadow-[0_15px_40px_rgba(37,99,235,0.4)] flex items-center justify-center active:scale-75 transition-all z-50 border-4 ${appStyles.fabBorder}`}
       >
         <PlusCircle size={32} strokeWidth={2.5} />
@@ -147,14 +187,16 @@ export default function App() {
         ))}
       </nav>
 
-      {/* Added isDarkMode prop here */}
       <TransactionModal 
         isDarkMode={isDarkMode}
         isOpen={isModalOpen} 
         onClose={() => setIsModalOpen(false)} 
         categories={categories} 
         initialCatId={selectedCatId} 
-        onAddTransaction={handleAddTransaction} 
+        initialAmount={modalAmount} // NEW
+        initialType={modalType}     // NEW
+        onAddTransaction={handleAddTransaction}
+        transactions={transactions} 
       />
     </div>
   )

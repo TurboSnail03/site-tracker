@@ -1,23 +1,40 @@
 import { useState, useEffect, useRef } from 'react'
-import { X, Plus, ChevronDown, ArrowLeft } from 'lucide-react'
+import { X, Plus, ChevronDown, ArrowLeft, Calendar } from 'lucide-react'
 
-export default function TransactionModal({ isDarkMode, isOpen, onClose, categories, onAddTransaction, initialCatId }) {
-  const [formData, setFormData] = useState({ type: 'expense', categoryId: '', amount: '', vendor: '', newCategoryName: '' })
+// UPDATED: Added initialAmount and initialType to props
+export default function TransactionModal({ isDarkMode, isOpen, onClose, categories, onAddTransaction, initialCatId, initialAmount = '', initialType = 'expense', transactions = [] }) {
+  const getNow = () => {
+    const d = new Date()
+    d.setMinutes(d.getMinutes() - d.getTimezoneOffset())
+    return d.toISOString().slice(0, 16)
+  }
+
+  const [formData, setFormData] = useState({ 
+    type: 'expense', 
+    categoryId: '', 
+    amount: '', 
+    vendor: '', 
+    newCategoryName: '',
+    date: getNow()
+  })
+  
   const [isCreatingNew, setIsCreatingNew] = useState(false)
   const inputRef = useRef(null)
 
+  // UPDATED: Use effect now listens for initialAmount and initialType
   useEffect(() => {
     if (isOpen) {
       setFormData(prev => ({
         ...prev,
         categoryId: initialCatId || '',
-        amount: '',
-        type: initialCatId ? 'payment' : 'expense' 
+        amount: initialAmount ? String(initialAmount) : '',
+        type: initialType,
+        date: getNow()
       }))
       setIsCreatingNew(!initialCatId && Object.keys(categories).length === 0)
       setTimeout(() => inputRef.current?.focus(), 100)
     }
-  }, [isOpen, initialCatId, categories])
+  }, [isOpen, initialCatId, initialAmount, initialType, categories])
 
   if (!isOpen) return null
 
@@ -50,13 +67,14 @@ export default function TransactionModal({ isDarkMode, isOpen, onClose, categori
       type: formData.type,
       amount: Number(formData.amount),
       vendor: formData.vendor.trim(),
-      date: new Date().toISOString().split('T')[0]
+      date: formData.date
     }, newCategoryObj)
     onClose()
   }
 
+  const uniqueVendors = [...new Set(transactions.map(tx => tx.vendor?.trim()).filter(Boolean))]
+
   const isExpense = formData.type === 'expense'
-  // Theme Helper
   const theme = {
     modalBg: isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-amber-100',
     inputBg: isDarkMode ? 'bg-slate-800' : 'bg-amber-50/50',
@@ -94,6 +112,19 @@ export default function TransactionModal({ isDarkMode, isOpen, onClose, categori
           </div>
 
           <div className="space-y-4">
+            <div className={`relative flex items-center rounded-[1.5rem] ${theme.inputBg}`}>
+              <Calendar size={18} className="absolute left-5 text-slate-400 pointer-events-none" />
+              <input 
+                type="datetime-local" 
+                value={formData.date} 
+                onChange={(e) => setFormData({...formData, date: e.target.value})}
+                // The quick fix to make the calendar open instantly
+                onClick={(e) => e.target.showPicker?.()}
+                style={{ colorScheme: isDarkMode ? 'dark' : 'light' }}
+                className={`w-full p-5 pl-14 outline-none font-black text-sm tracking-tight cursor-pointer bg-transparent ${theme.text}`} 
+              />
+            </div>
+
             {isCreatingNew ? (
               <div className="flex gap-2 animate-in fade-in slide-in-from-left-2 duration-200">
                 <button type="button" onClick={() => setIsCreatingNew(false)} className={`p-5 rounded-[1.5rem] text-slate-500 active:scale-90 ${theme.inputBg}`}>
@@ -109,7 +140,7 @@ export default function TransactionModal({ isDarkMode, isOpen, onClose, categori
                     value={formData.categoryId} 
                     onChange={(e) => setFormData({...formData, categoryId: e.target.value})}
                     style={{ color: formData.categoryId ? categories[formData.categoryId]?.color : '#94a3b8' }}
-                    className={`w-full p-5 rounded-[1.5rem] outline-none appearance-none font-black text-sm tracking-tight border-2 border-transparent focus:border-blue-500/20 ${theme.inputBg}`}
+                    className={`w-full p-5 rounded-[1.5rem] outline-none appearance-none font-black text-sm tracking-tight ${theme.inputBg}`}
                   >
                     <option value="" style={{ color: '#94a3b8' }}>Select Material...</option>
                     {Object.values(categories).map(c => (
@@ -120,13 +151,24 @@ export default function TransactionModal({ isDarkMode, isOpen, onClose, categori
                   </select>
                   <ChevronDown className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={18} />
                 </div>
-                <button type="button" onClick={() => setIsCreatingNew(true)} className={`p-5 bg-blue-50 dark:bg-blue-900/20 text-blue-600 rounded-[1.5rem] shadow-sm active:scale-95 ${theme.inputBg}`}>
+                <button type="button" onClick={() => setIsCreatingNew(true)} className={`p-5 text-blue-600 rounded-[1.5rem] active:scale-95 ${theme.inputBg}`}>
                   <Plus size={20}/>
                 </button>
               </div>
             )}
-            <input type="text" placeholder="Vendor / Note (Optional)" value={formData.vendor} onChange={(e) => setFormData({...formData, vendor: e.target.value})}
-              className={`w-full p-5 rounded-[1.5rem] outline-none font-medium border-2 border-transparent focus:border-blue-500/10 ${theme.inputBg} ${theme.text}`} />
+            
+            <datalist id="vendor-list">
+              {uniqueVendors.map((v, i) => <option key={i} value={v} />)}
+            </datalist>
+
+            <input 
+              type="text" 
+              list="vendor-list"
+              placeholder="Vendor / Note (Optional)" 
+              value={formData.vendor} 
+              onChange={(e) => setFormData({...formData, vendor: e.target.value})}
+              className={`w-full p-5 rounded-[1.5rem] outline-none font-medium border-2 border-transparent focus:border-blue-500/10 ${theme.inputBg} ${theme.text}`} 
+            />
           </div>
 
           <button type="submit" className={`w-full text-white font-black py-6 rounded-[2rem] shadow-xl text-lg active:scale-95 transition-all uppercase tracking-[0.2em] ${isExpense ? 'bg-rose-500 shadow-rose-500/30' : 'bg-emerald-500 shadow-emerald-500/30'}`}>

@@ -4,6 +4,7 @@ import { Trash2, ArrowUpRight, ArrowDownLeft, Search } from 'lucide-react'
 export default function LogTab({ isDarkMode, transactions, categories, setTransactions }) {
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState('all') 
+  const [timeFilter, setTimeFilter] = useState('all') // NEW: Time filter state
 
   const handleDelete = (id) => {
     if (window.confirm("Delete this transaction?")) {
@@ -16,8 +17,30 @@ export default function LogTab({ isDarkMode, transactions, categories, setTransa
     const matchesSearch = cat.name.toLowerCase().includes(search.toLowerCase()) || 
                           (tx.vendor && tx.vendor.toLowerCase().includes(search.toLowerCase()))
     const matchesFilter = filter === 'all' || tx.type === filter
-    return matchesSearch && matchesFilter
+    
+    // NEW: Time filtering logic
+    let matchesTime = true
+    if (timeFilter !== 'all') {
+      const txDate = new Date(tx.date)
+      const now = new Date()
+      if (timeFilter === 'month') {
+        matchesTime = txDate.getMonth() === now.getMonth() && txDate.getFullYear() === now.getFullYear()
+      } else if (timeFilter === 'week') {
+        const diffDays = (now - txDate) / (1000 * 60 * 60 * 24)
+        matchesTime = diffDays >= 0 && diffDays <= 7 
+      }
+    }
+
+    return matchesSearch && matchesFilter && matchesTime
   })
+
+  // Minimal helper to format the date and time
+  const formatDateTime = (dateStr) => {
+    const dateObj = new Date(dateStr)
+    const date = dateObj.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
+    const time = dateObj.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
+    return `${date} • ${time}`.toUpperCase()
+  }
 
   return (
     <div className="space-y-4 pb-20">
@@ -37,6 +60,20 @@ export default function LogTab({ isDarkMode, transactions, categories, setTransa
             }`}
           />
         </div>
+        
+        {/* NEW: Time Filter Dropdown */}
+        <select 
+          value={timeFilter}
+          onChange={(e) => setTimeFilter(e.target.value)}
+          className={`w-full p-3 rounded-2xl outline-none font-black text-[10px] uppercase tracking-widest cursor-pointer transition-colors ${
+            isDarkMode ? 'bg-slate-800 text-white' : 'bg-amber-50/50 text-slate-800'
+          }`}
+        >
+          <option value="all">Time: All Time</option>
+          <option value="month">Time: This Month</option>
+          <option value="week">Time: Past 7 Days</option>
+        </select>
+
         <div className="flex gap-2">
           {['all', 'expense', 'payment'].map(type => (
             <button 
@@ -71,7 +108,9 @@ export default function LogTab({ isDarkMode, transactions, categories, setTransa
                 </div>
                 <div>
                   <p className={`font-black leading-tight uppercase text-xs tracking-tight ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>{cat.name}</p>
-                  <p className="text-[9px] text-slate-400 font-bold uppercase">{tx.date} {tx.vendor && `• ${tx.vendor}`}</p>
+                  <p className="text-[9px] text-slate-400 font-bold uppercase">
+                    {formatDateTime(tx.date)} {tx.vendor && `• ${tx.vendor}`}
+                  </p>
                 </div>
               </div>
               <div className="flex items-center gap-3">
