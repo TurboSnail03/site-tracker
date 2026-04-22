@@ -1,14 +1,16 @@
 import { useState } from 'react'
 import { Trash2, ArrowUpRight, ArrowDownLeft, Search, Package } from 'lucide-react'
 
-export default function LogTab({ isDarkMode, transactions, categories, setTransactions }) {
+// ── FIX: Added onDeleteTransaction prop instead of setTransactions ─────────
+export default function LogTab({ isDarkMode, transactions, categories, onDeleteTransaction }) {
   const [search, setSearch]         = useState('')
   const [filter, setFilter]         = useState('all')
   const [timeFilter, setTimeFilter] = useState('all')
 
   const handleDelete = (id) => {
     if (window.confirm('Delete this transaction?')) {
-      setTransactions(prev => prev.filter(tx => tx.id !== id))
+      // ── FIX: Call the parent DB function instead of array filtering ────────
+      onDeleteTransaction(id)
     }
   }
 
@@ -128,7 +130,7 @@ export default function LogTab({ isDarkMode, transactions, categories, setTransa
                       </p>
                     </div>
                     
-                    {/* NEW: Transaction Quantity Pill */}
+                    {/* Transaction Quantity Pill */}
                     {tx.quantity && (
                       <div className={`flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[8px] font-bold uppercase tracking-widest ${
                         isDarkMode ? 'bg-blue-500/20 text-blue-400' : 'bg-blue-50 text-blue-600'

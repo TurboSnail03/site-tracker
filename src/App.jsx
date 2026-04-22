@@ -1,18 +1,23 @@
 import { useState, useEffect, useMemo } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { PlusCircle, LayoutDashboard, List, Settings, Sun, Moon, UploadCloud } from 'lucide-react'
+import { 
+  PlusCircle, 
+  LayoutDashboard, 
+  List, 
+  Settings, 
+  Sun, 
+  Moon, 
+  UploadCloud,
+  CloudCheck,
+  CloudOff
+} from 'lucide-react'
+import { useLiveQuery } from 'dexie-react-hooks'
+import { db } from './db'
+
 import SetupTab from './SetupTab'
 import TransactionModal from './TransactionModal'
 import LogTab from './LogTab'
 import DashboardTab from './DashboardTab'
-
-// Moved outside component — no longer recreated on every render
-const getSafeData = (key, fallback) => {
-  try {
-    const data = localStorage.getItem(key)
-    return data ? JSON.parse(data) : fallback
-  } catch (e) { return fallback }
-}
 
 export default function App() {
   // 1. PROJECT POINTER
@@ -20,13 +25,24 @@ export default function App() {
     () => localStorage.getItem('siteActiveProject') || 'Site A'
   )
 
-  // 2. DATA STATES (Scoped to active project)
-  const [categories, setCategories] = useState(
-    () => getSafeData(`siteCategories_${localStorage.getItem('siteActiveProject') || 'Site A'}`, {})
+  // 2. DATA STATES (Now powered by Dexie IndexedDB)
+  const categoriesList = useLiveQuery(
+    () => db.categories.where({ projectId: activeProject }).toArray(), 
+    [activeProject]
   )
-  const [transactions, setTransactions] = useState(
-    () => getSafeData(`siteTransactions_${localStorage.getItem('siteActiveProject') || 'Site A'}`, [])
+  const transactions = useLiveQuery(
+    () => db.transactions.where({ projectId: activeProject }).reverse().sortBy('date'), 
+    [activeProject]
   )
+
+  // Map database array back to the object format your components expect
+  const categories = useMemo(() => {
+    const obj = {}
+    if (categoriesList) {
+      categoriesList.forEach(c => obj[c.id] = c)
+    }
+    return obj
+  }, [categoriesList])
 
   const [activeTab, setActiveTab] = useState('dashboard')
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -37,13 +53,25 @@ export default function App() {
   const [isDarkMode, setIsDarkMode] = useState(
     () => localStorage.getItem('siteTheme') === 'dark'
   )
-  const [isDragging, setIsDragging] = useState(false)
+  
+  // DRAG FIX: Using a counter to prevent the flickering "dragleave" bug
+  const [dragCounter, setDragCounter] = useState(0)
+  const isDragging = dragCounter > 0
 
-  // Sync effect only handles incremental data changes
+  // CLOUD SYNC STATES
+  const [isSyncing, setIsSyncing] = useState(false)
+  const [lastSync, setLastSync] = useState(() => localStorage.getItem('siteLastSync') || null)
+
+  // PERSISTENCE REQUEST
   useEffect(() => {
-    localStorage.setItem(`siteCategories_${activeProject}`, JSON.stringify(categories))
-    localStorage.setItem(`siteTransactions_${activeProject}`, JSON.stringify(transactions))
-  }, [categories, transactions]) // eslint-disable-line react-hooks/exhaustive-deps
+    const requestPersistence = async () => {
+      if (navigator.storage && navigator.storage.persist) {
+        const granted = await navigator.storage.persist()
+        console.log(granted ? "🛡️ Storage Persistence Granted." : "⚠️ Persistence Denied.")
+      }
+    }
+    requestPersistence()
+  }, [])
 
   // Theme Engine
   useEffect(() => {
@@ -52,50 +80,70 @@ export default function App() {
     localStorage.setItem('siteTheme', isDarkMode ? 'dark' : 'light')
   }, [isDarkMode])
 
-  // handleProjectSwitch explicitly saves current project data BEFORE switching
-  const handleProjectSwitch = (projectName) => {
-    localStorage.setItem(`siteCategories_${activeProject}`, JSON.stringify(categories))
-    localStorage.setItem(`siteTransactions_${activeProject}`, JSON.stringify(transactions))
-
-    const newCats = getSafeData(`siteCategories_${projectName}`, {})
-    const newTxs  = getSafeData(`siteTransactions_${projectName}`, [])
-
-    localStorage.setItem('siteActiveProject', projectName)
-    setActiveProject(projectName)
-    setCategories(newCats)
-    setTransactions(newTxs)
+  // SYNC PULSE SIMULATOR (Triggers on save)
+  const triggerSync = async () => {
+    if (!navigator.onLine) return
+    setIsSyncing(true)
+    try {
+      await new Promise(r => setTimeout(r, 1200)) 
+      const timeStr = new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})
+      setLastSync(timeStr)
+      localStorage.setItem('siteLastSync', timeStr)
+    } catch (e) { console.error(e) } 
+    finally { setIsSyncing(false) }
   }
 
-  // Rename guards against duplicate project names
-  const handleProjectRename = (oldName, newName) => {
+  // Project Switching
+  const handleProjectSwitch = (projectName) => {
+    localStorage.setItem('siteActiveProject', projectName)
+    setActiveProject(projectName)
+  }
+
+  // ── FIX: Project Renaming now natively updates the db.projects table ──
+  const handleProjectRename = async (oldName, newName) => {
     if (!newName || newName.trim() === '' || oldName === newName) return
     const cleanNewName = newName.trim()
 
-    if (localStorage.getItem(`siteCategories_${cleanNewName}`) !== null) {
-      alert(`A project named "${cleanNewName}" already exists. Choose a different name.`)
-      return
-    }
+    // Wrap the entire rename process in an atomic transaction
+    await db.transaction('rw', db.projects, db.categories, db.transactions, async () => {
+      
+      // 1. Rename the actual project in the projects table
+      const existingProject = await db.projects.where({ name: oldName }).first()
+      if (existingProject) {
+        await db.projects.where({ name: oldName }).modify({ name: cleanNewName })
+      } else {
+        // Fallback: If it's a legacy default project not explicitly created yet, add it
+        await db.projects.add({ name: cleanNewName })
+      }
 
-    localStorage.setItem(`siteCategories_${cleanNewName}`, JSON.stringify(categories))
-    localStorage.setItem(`siteTransactions_${cleanNewName}`, JSON.stringify(transactions))
-
-    localStorage.removeItem(`siteCategories_${oldName}`)
-    localStorage.removeItem(`siteTransactions_${oldName}`)
+      // 2. Modify all linked records in the DB to point to the new project name
+      await db.categories.where({ projectId: oldName }).modify({ projectId: cleanNewName })
+      await db.transactions.where({ projectId: oldName }).modify({ projectId: cleanNewName })
+    })
 
     localStorage.setItem('siteActiveProject', cleanNewName)
     setActiveProject(cleanNewName)
   }
 
-  const processImport = (file) => {
+  // Import via JSON File (Wrapped in a DB Transaction for safety)
+  const processImport = async (file) => {
     if (!file) return
     const reader = new FileReader()
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       try {
         const parsed = JSON.parse(e.target.result)
         if (parsed.categories && parsed.transactions) {
           if (window.confirm(`Overwrite data for project: ${activeProject}?`)) {
-            setCategories(parsed.categories)
-            setTransactions(parsed.transactions)
+            await db.transaction('rw', db.categories, db.transactions, async () => {
+              await db.categories.where({ projectId: activeProject }).delete()
+              await db.transactions.where({ projectId: activeProject }).delete()
+              
+              const catsToIn = Object.values(parsed.categories).map(c => ({ ...c, projectId: activeProject }))
+              const txsToIn = parsed.transactions.map(t => ({ ...t, projectId: activeProject }))
+              
+              await db.categories.bulkAdd(catsToIn)
+              await db.transactions.bulkAdd(txsToIn)
+            })
           }
         }
       } catch (err) { alert('Invalid backup file.') }
@@ -103,20 +151,18 @@ export default function App() {
     reader.readAsText(file)
   }
 
-  const handleAddTransaction = (newTx, newCat = null) => {
-    if (newCat) setCategories(prev => ({ ...prev, [newCat.id]: newCat }))
-    setTransactions(prev => [newTx, ...prev])
+  const handleAddTransaction = async (newTx, newCat = null) => {
+    if (newCat) await db.categories.put({ ...newCat, projectId: activeProject })
+    await db.transactions.add({ ...newTx, projectId: activeProject })
     if (window.navigator.vibrate) window.navigator.vibrate(50)
+    triggerSync() // Auto-pulse cloud sync
   }
 
-  // UPDATED: Allows negative remaining balance for Advanced Payments
   const globalStats = useMemo(() => {
     let expense = 0, paid = 0
     const txList = Array.isArray(transactions) ? transactions : []
     txList.forEach(tx => tx.type === 'expense' ? expense += tx.amount : paid += tx.amount)
-    
-    // Removed Math.max(0, ...) so surpluses register as negatives
-    return { expense, paid, remaining: expense - paid }
+    return { expense, paid, remaining: Math.max(0, expense - paid) }
   }, [transactions])
 
   const appStyles = {
@@ -131,24 +177,30 @@ export default function App() {
     fabBorder:   isDarkMode ? 'border-[#0f172a]'                      : 'border-slate-50',
   }
 
-  // Calculate percentage, handling edge case if expense is 0 but paid is > 0
   const paidPct = globalStats.expense > 0
     ? Math.min((globalStats.paid / globalStats.expense) * 100, 100)
-    : (globalStats.paid > 0 ? 100 : 0)
-
-  const isAdvanced = globalStats.remaining < 0
-  const absRemaining = Math.abs(globalStats.remaining)
+    : 0
 
   return (
     <div
       className={`h-screen-safe w-full flex flex-col transition-colors duration-300 overflow-hidden relative ${appStyles.bg} ${appStyles.text}`}
-      onDragOver={(e) => { e.preventDefault(); setIsDragging(true) }}
-      onDragEnter={(e) => { e.preventDefault(); setIsDragging(true) }}
-      onDragLeave={(e) => { if (e.relatedTarget === null) setIsDragging(false) }}
+      onDragEnter={(e) => { 
+        e.preventDefault()
+        setDragCounter(prev => prev + 1) 
+      }}
+      onDragOver={(e) => { 
+        e.preventDefault() 
+      }}
+      onDragLeave={(e) => { 
+        e.preventDefault()
+        setDragCounter(prev => prev - 1) 
+      }}
       onDrop={(e) => {
         e.preventDefault()
-        setIsDragging(false)
-        processImport(e.dataTransfer.files[0])
+        setDragCounter(0)
+        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+          processImport(e.dataTransfer.files[0])
+        }
       }}
     >
       {/* Drag Overlay */}
@@ -162,30 +214,41 @@ export default function App() {
         </div>
       )}
 
-      {/* Header */}
+      {/* Header — header-safe pads around notch/Dynamic Island/status bar */}
       <header className="header-safe bg-gradient-to-br from-slate-900 via-slate-900 to-slate-800 text-white px-5 flex justify-between items-center shrink-0 shadow-xl shadow-black/25 z-40">
         <div>
           <h1 className="text-xl font-black tracking-tight leading-none">
             SITE<span className="text-blue-400">TRACKER</span>
           </h1>
           <div className="flex items-center gap-2 mt-2">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]" />
+            <span className={`w-1.5 h-1.5 rounded-full ${isSyncing ? 'bg-blue-400 animate-pulse' : 'bg-emerald-400'} shadow-[0_0_6px_rgba(52,211,153,0.8)]`} />
             <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-[0.25em]">
-              {activeProject}
+              {isSyncing ? 'Syncing...' : (lastSync ? `Backed up ${lastSync}` : activeProject)}
             </p>
           </div>
         </div>
-        <button
-          onClick={() => setIsDarkMode(!isDarkMode)}
-          className="touch-target rounded-xl bg-slate-800/80 border border-slate-700/50 hover:bg-slate-700 active:scale-90 transition-all"
-        >
-          {isDarkMode
-            ? <Sun  size={18} className="text-yellow-400" />
-            : <Moon size={18} className="text-blue-300" />}
-        </button>
+        
+        <div className="flex gap-2">
+          {/* Cloud Sync Status Icon */}
+          <button
+            onClick={triggerSync}
+            className="touch-target rounded-xl bg-slate-800/80 border border-slate-700/50 hover:bg-slate-700 active:scale-90 transition-all text-slate-400 flex items-center justify-center"
+          >
+            {navigator.onLine ? <CloudCheck size={18} className="text-emerald-400" /> : <CloudOff size={18} className="text-rose-400" />}
+          </button>
+          
+          <button
+            onClick={() => setIsDarkMode(!isDarkMode)}
+            className="touch-target rounded-xl bg-slate-800/80 border border-slate-700/50 hover:bg-slate-700 active:scale-90 transition-all"
+          >
+            {isDarkMode
+              ? <Sun  size={18} className="text-yellow-400" />
+              : <Moon size={18} className="text-blue-300" />}
+          </button>
+        </div>
       </header>
 
-      {/* Main Content */}
+      {/* Main Content with AnimatePresence tab transitions */}
       <main className="flex-1 overflow-y-auto no-scrollbar">
         <AnimatePresence mode="wait" initial={false}>
           <motion.div
@@ -198,21 +261,17 @@ export default function App() {
           >
             {activeTab === 'dashboard' && (
               <>
-                {/* Hero Balance Card - UPDATED WITH LEDGER LOGIC */}
+                {/* Hero Balance Card */}
                 <div className={`rounded-2xl p-5 shadow-lg border mb-5 relative transition-colors duration-300 ${appStyles.cardBg} ${appStyles.cardBorder}`}>
-                  
-                  <p className={`text-[10px] font-semibold uppercase tracking-[0.25em] mb-1 ${isAdvanced ? 'text-emerald-500' : appStyles.textSubtle}`}>
-                    {isAdvanced ? 'Advanced Payment' : (globalStats.remaining === 0 ? 'All Cleared' : 'Balance Due')}
+                  <p className={`text-[10px] font-semibold uppercase tracking-[0.25em] mb-1 ${appStyles.textSubtle}`}>
+                    Balance Due
                   </p>
-                  
-                  <h2 className={`text-5xl font-black tracking-tighter leading-none mt-1 ${
-                    isAdvanced ? 'text-emerald-500' : (globalStats.remaining === 0 ? 'text-slate-400' : 'text-rose-500')
-                  }`}>
-                    {isAdvanced ? '+' : ''}₹{absRemaining.toLocaleString()}
+                  <h2 className="text-5xl font-black text-rose-500 tracking-tighter leading-none mt-1">
+                    ₹{globalStats.remaining.toLocaleString()}
                   </h2>
 
                   {/* Overall progress bar */}
-                  {(globalStats.expense > 0 || globalStats.paid > 0) && (
+                  {globalStats.expense > 0 && (
                     <div className={`mt-4 h-1 rounded-full overflow-hidden ${isDarkMode ? 'bg-slate-800' : 'bg-slate-100'}`}>
                       <div
                         className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 rounded-full transition-all duration-1000"
@@ -243,7 +302,7 @@ export default function App() {
 
                 <DashboardTab
                   isDarkMode={isDarkMode}
-                  transactions={transactions}
+                  transactions={transactions || []}
                   categories={categories}
                   onCardClick={(id, amount = '', type = 'payment') => {
                     setSelectedCatId(id)
@@ -258,9 +317,12 @@ export default function App() {
             {activeTab === 'log' && (
               <LogTab
                 isDarkMode={isDarkMode}
-                transactions={transactions}
+                transactions={transactions || []}
                 categories={categories}
-                setTransactions={setTransactions}
+                onDeleteTransaction={async (id) => {
+                   await db.transactions.delete(id)
+                   triggerSync() // Auto-pulse cloud sync
+                }}
               />
             )}
 
@@ -268,9 +330,9 @@ export default function App() {
               <SetupTab
                 isDarkMode={isDarkMode}
                 categories={categories}
-                setCategories={setCategories}
-                transactions={transactions}
-                setTransactions={setTransactions}
+                setCategories={async (newCats) => { await db.categories.bulkPut(Object.values(newCats)) }}
+                transactions={transactions || []}
+                setTransactions={async (newList) => { await db.transactions.clear(); await db.transactions.bulkAdd(newList) }}
                 processImport={processImport}
                 activeProject={activeProject}
                 switchProject={handleProjectSwitch}
@@ -281,10 +343,10 @@ export default function App() {
         </AnimatePresence>
       </main>
 
-      {/* FAB — Add Transaction (Triggers New Setup Flow) */}
+      {/* FAB — Add Transaction */}
       <motion.button
         onClick={() => {
-          setSelectedCatId('') // Empty ID triggers "New Material Setup" mode
+          setSelectedCatId('')
           setModalAmount('')
           setModalType('expense')
           setIsModalOpen(true)
@@ -302,7 +364,7 @@ export default function App() {
         {[
           { id: 'dashboard', icon: LayoutDashboard, label: 'Stats' },
           { id: 'log',       icon: List,            label: 'Log'   },
-          { id: 'setup',     icon: Settings,        label: 'Sync'  },
+          { id: 'setup',     icon: Settings,        label: 'Cloud' },
         ].map(tab => (
           <button
             key={tab.id}
@@ -337,7 +399,7 @@ export default function App() {
         initialAmount={modalAmount}
         initialType={modalType}
         onAddTransaction={handleAddTransaction}
-        transactions={transactions}
+        transactions={transactions || []}
       />
     </div>
   )

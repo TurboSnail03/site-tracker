@@ -3,26 +3,28 @@ import ReactDOM from 'react-dom/client'
 import App from './App.jsx'
 import './index.css'
 import { registerSW } from 'virtual:pwa-register'
+import { GoogleOAuthProvider } from '@react-oauth/google'
 
-// FIX #8: Replaced `immediate: true` with a user-prompted update flow.
-// `immediate: true` forces the service worker to take control and swap the
-// app shell mid-session, which can cause a blank screen or broken asset
-// references while the user is entering a transaction.
-// The new pattern shows a non-blocking confirm() so the user controls when
-// the update applies. onOfflineReady fires silently — no disruption.
+// Service Worker Update Flow
+// Ensures the app shell stays fresh without interrupting active transactions.
 registerSW({
   onNeedRefresh() {
-    if (confirm('A new version of SiteTracker is available. Reload now to update?')) {
+    if (confirm('New SiteTracker update available. Reload to apply?')) {
       window.location.reload()
     }
   },
   onOfflineReady() {
-    console.log('[SiteTracker] App is ready for offline use.')
+    console.log('[SiteTracker] Ready for foolproof offline use.')
   },
 })
 
+// Your Google Client ID from the Cloud Console
+const GOOGLE_CLIENT_ID = "537010194195-emq48ik6km3m0gnv746t05mscj49ahrh.apps.googleusercontent.com"
+
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <App />
+    <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
+      <App />
+    </GoogleOAuthProvider>
   </React.StrictMode>,
 )
