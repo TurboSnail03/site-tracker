@@ -6,7 +6,7 @@ import TransactionModal from './TransactionModal'
 import LogTab from './LogTab'
 import DashboardTab from './DashboardTab'
 
-// FIX #4: Moved outside component — no longer recreated on every render
+// Moved outside component — no longer recreated on every render
 const getSafeData = (key, fallback) => {
   try {
     const data = localStorage.getItem(key)
@@ -39,9 +39,7 @@ export default function App() {
   )
   const [isDragging, setIsDragging] = useState(false)
 
-  // FIX #1: Sync effect only handles incremental data changes — NOT project switching.
-  // activeProject is intentionally excluded from the dependency array here.
-  // Project switching and renaming persist data themselves before mutating state.
+  // Sync effect only handles incremental data changes
   useEffect(() => {
     localStorage.setItem(`siteCategories_${activeProject}`, JSON.stringify(categories))
     localStorage.setItem(`siteTransactions_${activeProject}`, JSON.stringify(transactions))
@@ -54,15 +52,11 @@ export default function App() {
     localStorage.setItem('siteTheme', isDarkMode ? 'dark' : 'light')
   }, [isDarkMode])
 
-  // FIX #1: handleProjectSwitch now explicitly saves current project data BEFORE
-  // switching state, eliminating the race condition where the sync useEffect
-  // could fire mid-switch with a mismatched activeProject/categories pair.
+  // handleProjectSwitch explicitly saves current project data BEFORE switching
   const handleProjectSwitch = (projectName) => {
-    // Persist current project first
     localStorage.setItem(`siteCategories_${activeProject}`, JSON.stringify(categories))
     localStorage.setItem(`siteTransactions_${activeProject}`, JSON.stringify(transactions))
 
-    // Now load and apply the new project
     const newCats = getSafeData(`siteCategories_${projectName}`, {})
     const newTxs  = getSafeData(`siteTransactions_${projectName}`, [])
 
@@ -72,27 +66,22 @@ export default function App() {
     setTransactions(newTxs)
   }
 
-  // FIX #1 + FIX #2: Rename now guards against duplicate project names (silent
-  // overwrite) and explicitly persists data rather than relying on the effect.
+  // Rename guards against duplicate project names
   const handleProjectRename = (oldName, newName) => {
     if (!newName || newName.trim() === '' || oldName === newName) return
     const cleanNewName = newName.trim()
 
-    // FIX #2: Conflict guard — prevents silent overwrite of existing project
     if (localStorage.getItem(`siteCategories_${cleanNewName}`) !== null) {
       alert(`A project named "${cleanNewName}" already exists. Choose a different name.`)
       return
     }
 
-    // 1. Write current in-memory data to the new key
     localStorage.setItem(`siteCategories_${cleanNewName}`, JSON.stringify(categories))
     localStorage.setItem(`siteTransactions_${cleanNewName}`, JSON.stringify(transactions))
 
-    // 2. Clear old keys
     localStorage.removeItem(`siteCategories_${oldName}`)
     localStorage.removeItem(`siteTransactions_${oldName}`)
 
-    // 3. Update pointer and React state
     localStorage.setItem('siteActiveProject', cleanNewName)
     setActiveProject(cleanNewName)
   }
@@ -120,11 +109,14 @@ export default function App() {
     if (window.navigator.vibrate) window.navigator.vibrate(50)
   }
 
+  // UPDATED: Allows negative remaining balance for Advanced Payments
   const globalStats = useMemo(() => {
     let expense = 0, paid = 0
     const txList = Array.isArray(transactions) ? transactions : []
     txList.forEach(tx => tx.type === 'expense' ? expense += tx.amount : paid += tx.amount)
-    return { expense, paid, remaining: Math.max(0, expense - paid) }
+    
+    // Removed Math.max(0, ...) so surpluses register as negatives
+    return { expense, paid, remaining: expense - paid }
   }, [transactions])
 
   const appStyles = {
@@ -139,9 +131,13 @@ export default function App() {
     fabBorder:   isDarkMode ? 'border-[#0f172a]'                      : 'border-slate-50',
   }
 
+  // Calculate percentage, handling edge case if expense is 0 but paid is > 0
   const paidPct = globalStats.expense > 0
     ? Math.min((globalStats.paid / globalStats.expense) * 100, 100)
-    : 0
+    : (globalStats.paid > 0 ? 100 : 0)
+
+  const isAdvanced = globalStats.remaining < 0
+  const absRemaining = Math.abs(globalStats.remaining)
 
   return (
     <div
@@ -166,7 +162,7 @@ export default function App() {
         </div>
       )}
 
-      {/* Header — header-safe pads around notch/Dynamic Island/status bar */}
+      {/* Header */}
       <header className="header-safe bg-gradient-to-br from-slate-900 via-slate-900 to-slate-800 text-white px-5 flex justify-between items-center shrink-0 shadow-xl shadow-black/25 z-40">
         <div>
           <h1 className="text-xl font-black tracking-tight leading-none">
@@ -189,7 +185,7 @@ export default function App() {
         </button>
       </header>
 
-      {/* Main Content with AnimatePresence tab transitions */}
+      {/* Main Content */}
       <main className="flex-1 overflow-y-auto no-scrollbar">
         <AnimatePresence mode="wait" initial={false}>
           <motion.div
@@ -202,17 +198,21 @@ export default function App() {
           >
             {activeTab === 'dashboard' && (
               <>
-                {/* Hero Balance Card */}
+                {/* Hero Balance Card - UPDATED WITH LEDGER LOGIC */}
                 <div className={`rounded-2xl p-5 shadow-lg border mb-5 relative transition-colors duration-300 ${appStyles.cardBg} ${appStyles.cardBorder}`}>
-                  <p className={`text-[10px] font-semibold uppercase tracking-[0.25em] mb-1 ${appStyles.textSubtle}`}>
-                    Balance Due
+                  
+                  <p className={`text-[10px] font-semibold uppercase tracking-[0.25em] mb-1 ${isAdvanced ? 'text-emerald-500' : appStyles.textSubtle}`}>
+                    {isAdvanced ? 'Advanced Payment' : (globalStats.remaining === 0 ? 'All Cleared' : 'Balance Due')}
                   </p>
-                  <h2 className="text-5xl font-black text-rose-500 tracking-tighter leading-none mt-1">
-                    ₹{globalStats.remaining.toLocaleString()}
+                  
+                  <h2 className={`text-5xl font-black tracking-tighter leading-none mt-1 ${
+                    isAdvanced ? 'text-emerald-500' : (globalStats.remaining === 0 ? 'text-slate-400' : 'text-rose-500')
+                  }`}>
+                    {isAdvanced ? '+' : ''}₹{absRemaining.toLocaleString()}
                   </h2>
 
                   {/* Overall progress bar */}
-                  {globalStats.expense > 0 && (
+                  {(globalStats.expense > 0 || globalStats.paid > 0) && (
                     <div className={`mt-4 h-1 rounded-full overflow-hidden ${isDarkMode ? 'bg-slate-800' : 'bg-slate-100'}`}>
                       <div
                         className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 rounded-full transition-all duration-1000"
@@ -281,10 +281,10 @@ export default function App() {
         </AnimatePresence>
       </main>
 
-      {/* FAB — Add Transaction */}
+      {/* FAB — Add Transaction (Triggers New Setup Flow) */}
       <motion.button
         onClick={() => {
-          setSelectedCatId('')
+          setSelectedCatId('') // Empty ID triggers "New Material Setup" mode
           setModalAmount('')
           setModalType('expense')
           setIsModalOpen(true)
@@ -302,7 +302,7 @@ export default function App() {
         {[
           { id: 'dashboard', icon: LayoutDashboard, label: 'Stats' },
           { id: 'log',       icon: List,            label: 'Log'   },
-          { id: 'setup',     icon: Settings,         label: 'Sync'  },
+          { id: 'setup',     icon: Settings,        label: 'Sync'  },
         ].map(tab => (
           <button
             key={tab.id}

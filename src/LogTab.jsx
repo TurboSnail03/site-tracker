@@ -6,9 +6,7 @@ export default function LogTab({ isDarkMode, transactions, categories, setTransa
   const [filter, setFilter]         = useState('all')
   const [timeFilter, setTimeFilter] = useState('all')
 
-  // FIX #3: Use functional updater (prev =>) to avoid stale closure.
-  // Previously `transactions` was captured at render time, meaning a second
-  // rapid delete would work from a stale array and silently undo the first.
+  // Use functional updater (prev =>) to avoid stale closure.
   const handleDelete = (id) => {
     if (window.confirm('Delete this transaction?')) {
       setTransactions(prev => prev.filter(tx => tx.id !== id))
@@ -22,9 +20,7 @@ export default function LogTab({ isDarkMode, transactions, categories, setTransa
       (tx.vendor && tx.vendor.toLowerCase().includes(search.toLowerCase()))
     const matchesFilter = filter === 'all' || tx.type === filter
 
-    // FIX #12: Anchored to start-of-day boundaries to prevent floating-point
-    // off-by-one. Previously `<= 7` could include or exclude transactions
-    // inconsistently depending on the time of day.
+    // Anchored to start-of-day boundaries to prevent floating-point off-by-one.
     let matchesTime = true
     if (timeFilter !== 'all') {
       const txDate = new Date(tx.date)
@@ -114,9 +110,11 @@ export default function LogTab({ isDarkMode, transactions, categories, setTransa
               className={`p-3.5 rounded-xl border flex items-center justify-between transition-colors ${cardBase}`}
             >
               <div className="flex items-center gap-3">
-                {/* Type icon badge */}
+                {/* Type icon badge - Updated with Dark Mode support for SaaS Look */}
                 <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
-                  isExpense ? 'bg-rose-50 text-rose-500' : 'bg-emerald-50 text-emerald-600'
+                  isExpense 
+                    ? (isDarkMode ? 'bg-rose-500/10 text-rose-500' : 'bg-rose-50 text-rose-500') 
+                    : (isDarkMode ? 'bg-emerald-500/10 text-emerald-500' : 'bg-emerald-50 text-emerald-600')
                 }`}>
                   {isExpense
                     ? <ArrowUpRight size={18} strokeWidth={2.5} />
@@ -140,13 +138,13 @@ export default function LogTab({ isDarkMode, transactions, categories, setTransa
               </div>
 
               <div className="flex items-center gap-2.5">
+                {/* AMOUNT TEXT - Updated to Red for Expenses, Green for Payments */}
                 <p className={`font-black text-sm tracking-tight ${
-                  isExpense
-                    ? (isDarkMode ? 'text-slate-200' : 'text-slate-800')
-                    : 'text-emerald-500'
+                  isExpense ? 'text-rose-500' : 'text-emerald-500'
                 }`}>
                   {isExpense ? '' : '+'}₹{tx.amount.toLocaleString()}
                 </p>
+                
                 <button
                   onClick={() => handleDelete(tx.id)}
                   className={`p-1.5 rounded-lg transition-all active:scale-75 ${subtle} hover:text-rose-500 hover:bg-rose-50`}

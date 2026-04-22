@@ -43,7 +43,7 @@ function ProgressRing({ percent, color, label, isDarkMode }) {
 }
 
 export default function DashboardTab({ isDarkMode, transactions, categories, onCardClick }) {
-  // ── Data computation — untouched ──────────────────────────────────────────
+  // ── Data computation — Updated for Advanced Payments ───────────────────────
   const materialData = useMemo(() => {
     const mats = {}
     Object.values(categories).forEach(cat => {
@@ -53,12 +53,17 @@ export default function DashboardTab({ isDarkMode, transactions, categories, onC
       if (!mats[tx.categoryId]) return
       if (tx.type === 'expense') mats[tx.categoryId].expense += tx.amount
       else mats[tx.categoryId].paid += tx.amount
-      mats[tx.categoryId].remaining = Math.max(0, mats[tx.categoryId].expense - mats[tx.categoryId].paid)
+      
+      // REMOVED Math.max(0, ...) to allow negative values (Advanced Payments)
+      mats[tx.categoryId].remaining = mats[tx.categoryId].expense - mats[tx.categoryId].paid
     })
-    return Object.values(mats).filter(m => m.expense > 0).sort((a, b) => b.remaining - a.remaining)
+    // Filter to show active categories, sort by absolute balance size
+    return Object.values(mats)
+      .filter(m => m.expense > 0 || m.paid > 0)
+      .sort((a, b) => Math.abs(b.remaining) - Math.abs(a.remaining))
   }, [transactions, categories])
 
-  // NEW: Calculate total expense for the breakdown chart
+  // Calculate total expense for the breakdown chart
   const totalExpense = useMemo(() => {
     return materialData.reduce((sum, mat) => sum + mat.expense, 0)
   }, [materialData])
@@ -126,7 +131,14 @@ export default function DashboardTab({ isDarkMode, transactions, categories, onC
 
       {/* ── Material Cards ───────────────────────────────────────────────── */}
       {materialData.map(mat => {
-        const percentPaid = Math.min(Math.round((mat.paid / mat.expense) * 100), 100)
+        // Logic for Advanced vs Debt
+        const isAdvanced = mat.remaining < 0
+        const absRemaining = Math.abs(mat.remaining)
+        
+        // Prevent division by zero if expense is 0 but an advance payment was made
+        const baseForPercent = Math.max(mat.expense, 1)
+        const percentPaid = isAdvanced ? 100 : Math.min(Math.round((mat.paid / baseForPercent) * 100), 100)
+
         return (
           <div
             key={mat.id}
@@ -137,9 +149,11 @@ export default function DashboardTab({ isDarkMode, transactions, categories, onC
                 : 'bg-white border-slate-200/80 shadow-slate-100 hover:border-slate-300 hover:shadow-md'
             }`}
           >
-            {/* Progress wash background */}
+            {/* Progress wash background - Green if advanced */}
             <div
-              className={`absolute inset-y-0 left-0 transition-all duration-1000 ${isDarkMode ? 'bg-emerald-500/8' : 'bg-emerald-500/5'}`}
+              className={`absolute inset-y-0 left-0 transition-all duration-1000 ${
+                isAdvanced ? 'bg-emerald-500/10' : (isDarkMode ? 'bg-emerald-500/8' : 'bg-emerald-500/5')
+              }`}
               style={{ width: `${percentPaid}%` }}
             />
             {/* Progress bottom bar */}
@@ -153,7 +167,7 @@ export default function DashboardTab({ isDarkMode, transactions, categories, onC
               <div className="flex items-center gap-3 min-w-0">
                 <ProgressRing
                   percent={percentPaid}
-                  color={mat.color}
+                  color={isAdvanced ? '#10b981' : mat.color}
                   label={mat.name.charAt(0).toUpperCase()}
                   isDarkMode={isDarkMode}
                 />
@@ -161,24 +175,31 @@ export default function DashboardTab({ isDarkMode, transactions, categories, onC
                   <p className={`font-bold text-sm uppercase tracking-tight truncate ${isDarkMode ? 'text-slate-100' : 'text-slate-800'}`}>
                     {mat.name}
                   </p>
-                  <p className="text-[9px] text-emerald-500 font-semibold uppercase tracking-wide mt-0.5">
-                    {percentPaid}% cleared
+                  <p className={`text-[9px] font-semibold uppercase tracking-wide mt-0.5 ${isAdvanced ? 'text-emerald-500' : 'text-emerald-500'}`}>
+                    {isAdvanced ? 'SURPLUS / ADVANCED' : `${percentPaid}% cleared`}
                   </p>
                 </div>
               </div>
 
               {/* Right: amount + settle */}
               <div className="text-right flex flex-col items-end gap-2 shrink-0">
-                <p className="text-lg font-black text-rose-500 tracking-tight">
-                  ₹{mat.remaining.toLocaleString()}
+                <p className={`text-lg font-black tracking-tight ${isAdvanced ? 'text-emerald-500' : 'text-rose-500'}`}>
+                  {isAdvanced ? '+' : ''}₹{absRemaining.toLocaleString()}
                 </p>
-                {mat.remaining > 0 ? (
+                
+                {mat.remaining !== 0 ? (
                   <button
                     onClick={(e) => {
                       e.stopPropagation()
-                      onCardClick(mat.id, mat.remaining, 'payment')
+                      // Smart Settle: If advanced, it adds an 'expense'. If debt, it adds a 'payment'.
+                      const settleType = isAdvanced ? 'expense' : 'payment'
+                      onCardClick(mat.id, absRemaining, settleType)
                     }}
-                    className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-[8px] font-bold uppercase tracking-widest shadow-md shadow-emerald-500/25 active:scale-90 transition-all"
+                    className={`px-3 py-1.5 rounded-lg text-[8px] font-bold uppercase tracking-widest shadow-md active:scale-90 transition-all ${
+                      isAdvanced 
+                        ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-500/25' 
+                        : 'bg-emerald-500 hover:bg-emerald-600 text-white shadow-emerald-500/25'
+                    }`}
                   >
                     Settle Up
                   </button>

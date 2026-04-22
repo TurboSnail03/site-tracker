@@ -1,9 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
-import { X, Plus, ChevronDown, ArrowLeft, Calendar } from 'lucide-react'
+import { X, Calendar, Lock } from 'lucide-react'
 import { getNextColor } from './colors'
 
-// FIX #10: Collision-safe ID generator — appends random suffix so two IDs
-// created within the same millisecond are still distinct.
+// Collision-safe ID generator
 const makeId = (prefix) =>
   `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
 
@@ -33,24 +32,41 @@ export default function TransactionModal({
     date:            getNow(),
   })
 
-  const [isCreatingNew, setIsCreatingNew] = useState(false)
   const inputRef = useRef(null)
 
+  // 1. FIX: The "Sticky State" killer function
+  const resetForm = () => {
+    setFormData({
+      type:            'expense',
+      categoryId:      '',
+      amount:          '',
+      vendor:          '',
+      newCategoryName: '',
+      date:            getNow(),
+    })
+  }
+
+  // 2. FIX: Explicitly clear/set state whenever the modal opens or closes
   useEffect(() => {
     if (isOpen) {
-      setFormData(prev => ({
-        ...prev,
-        categoryId: initialCatId || '',
-        amount:     initialAmount ? String(initialAmount) : '',
-        type:       initialType,
-        date:       getNow(),
-      }))
-      setIsCreatingNew(!initialCatId && Object.keys(categories).length === 0)
+      setFormData({
+        type:            initialType || 'expense',
+        categoryId:      initialCatId || '',
+        amount:          initialAmount ? String(initialAmount) : '',
+        vendor:          '', // Always wipe vendor on open
+        newCategoryName: '', // Always wipe new name on open
+        date:            getNow(),
+      })
       setTimeout(() => inputRef.current?.focus(), 100)
+    } else {
+      resetForm() // Wipe clean on close
     }
-  }, [isOpen, initialCatId, initialAmount, initialType, categories])
+  }, [isOpen, initialCatId, initialAmount, initialType])
 
   if (!isOpen) return null
+
+  // Determine which mode we are in
+  const isFastLogMode = !!initialCatId
 
   const handleAmountChange = (e) => {
     const val = e.target.value
@@ -66,13 +82,13 @@ export default function TransactionModal({
     let finalCatId     = formData.categoryId
     let newCategoryObj = null
 
-    if (isCreatingNew && formData.newCategoryName) {
-      finalCatId     = makeId('cat') // FIX #10
+    // 3. FIX: Separated Flow Logic
+    if (!isFastLogMode) {
+      if (!formData.newCategoryName.trim()) return // Prevent blank new materials
+      finalCatId     = makeId('cat')
       newCategoryObj = {
         id:    finalCatId,
         name:  formData.newCategoryName.trim(),
-        // Assign the next color from the curated palette so every material
-        // gets a perceptually distinct, easily recognizable hue.
         color: getNextColor(Object.keys(categories).length),
       }
     }
@@ -80,7 +96,7 @@ export default function TransactionModal({
     if (!finalCatId) return
 
     onAddTransaction({
-      id:         makeId('tx'), // FIX #10
+      id:         makeId('tx'),
       categoryId: finalCatId,
       type:       formData.type,
       amount:     Number(formData.amount),
@@ -88,11 +104,10 @@ export default function TransactionModal({
       date:       formData.date,
     }, newCategoryObj)
 
+    resetForm() // Final wipe before closing
     onClose()
   }
 
-  // FIX #11: Use vendor value as key — names are already deduplicated,
-  // so the value is stable and avoids the index-as-key anti-pattern.
   const uniqueVendors = [...new Set(transactions.map(tx => tx.vendor?.trim()).filter(Boolean))]
 
   const isExpense = formData.type === 'expense'
@@ -101,29 +116,27 @@ export default function TransactionModal({
   const modalBg   = isDarkMode ? 'bg-slate-900 border-slate-800/50' : 'bg-white border-slate-100'
   const subtle    = isDarkMode ? 'text-slate-500'    : 'text-slate-400'
 
-  const accentColor  = isExpense ? 'text-rose-500'    : 'text-emerald-500'
-  const accentBg     = isExpense ? 'bg-rose-500'      : 'bg-emerald-500'
+  const accentColor  = isExpense ? 'text-rose-500'      : 'text-emerald-500'
+  const accentBg     = isExpense ? 'bg-rose-500'        : 'bg-emerald-500'
   const accentShadow = isExpense ? 'shadow-rose-500/30' : 'shadow-emerald-500/30'
 
   return (
-    // FIX #13: Clicking the backdrop (overlay) dismisses the modal.
-    // The inner sheet stops propagation so clicks inside don't bubble up.
     <div
       className="fixed inset-0 bg-slate-950/75 backdrop-blur-sm z-[100] flex items-end justify-center"
       onClick={onClose}
     >
       <div
         className={`${modalBg} w-full max-w-md rounded-t-3xl shadow-2xl animate-slide-up px-6 pt-6 modal-bottom-safe border-t transition-colors duration-300 modal-sheet`}
-        onClick={(e) => e.stopPropagation()} // FIX #13: prevent bubble from inner sheet
+        onClick={(e) => e.stopPropagation()} 
       >
         {/* Header */}
         <div className="flex justify-between items-center mb-6">
           <div>
             <h2 className={`text-2xl font-black uppercase tracking-tight ${accentColor}`}>
-              Log {formData.type}
+              {isFastLogMode ? `Log ${formData.type}` : 'New Material'}
             </h2>
             <p className={`text-[10px] font-medium mt-0.5 uppercase tracking-widest ${subtle}`}>
-              New entry for {formData.type === 'expense' ? 'a cost' : 'a payment'}
+              {isFastLogMode ? 'Add to existing ledger' : 'Setup a new category'}
             </p>
           </div>
           <button
@@ -134,9 +147,9 @@ export default function TransactionModal({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4 autoComplete-off">
 
-          {/* Type Toggle — pill style with smooth transition */}
+          {/* Type Toggle */}
           <div className={`flex p-1 rounded-2xl ${inputBg}`}>
             {[
               { value: 'expense', label: 'Expense', active: 'bg-rose-500 shadow-rose-500/30' },
@@ -165,6 +178,7 @@ export default function TransactionModal({
                 ref={inputRef}
                 type="text"
                 inputMode="decimal"
+                autoComplete="off"
                 placeholder="0"
                 value={formData.amount}
                 onChange={handleAmountChange}
@@ -177,87 +191,71 @@ export default function TransactionModal({
           </div>
 
           <div className="space-y-3">
-            {/* Date Picker */}
-            <div className={`relative flex items-center rounded-xl ${inputBg}`}>
-              <Calendar size={16} className={`absolute left-4 pointer-events-none ${subtle}`} />
-              <input
-                type="datetime-local"
-                value={formData.date}
-                onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                onClick={(e) => e.target.showPicker?.()}
-                style={{ colorScheme: isDarkMode ? 'dark' : 'light' }}
-                className={`w-full p-4 pl-11 outline-none font-semibold text-sm tracking-tight cursor-pointer bg-transparent ${textClr}`}
-              />
-            </div>
-
-            {/* Category Selector / Creator */}
-            {isCreatingNew ? (
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsCreatingNew(false)}
-                  className={`p-4 rounded-xl ${subtle} active:scale-90 ${inputBg}`}
-                >
-                  <ArrowLeft size={18} />
-                </button>
-                <input
-                  type="text"
-                  placeholder="Material name…"
-                  value={formData.newCategoryName}
-                  onChange={(e) => setFormData({ ...formData, newCategoryName: e.target.value })}
-                  className={`flex-1 p-4 rounded-xl outline-none font-semibold border border-blue-500/20 ${inputBg} ${textClr}`}
-                />
+            
+            {/* 4. FIX: The Separated Contextual Flow */}
+            {isFastLogMode ? (
+              // FAST-LOG MODE: Locked Category Display
+              <div className={`p-4 rounded-xl flex items-center justify-between border border-transparent ${inputBg}`}>
+                <div className="flex items-center gap-3">
+                  <span 
+                    className="w-3 h-3 rounded-full shrink-0" 
+                    style={{ backgroundColor: categories[initialCatId]?.color }} 
+                  />
+                  <p className={`font-bold text-sm uppercase tracking-tight ${textClr}`}>
+                    {categories[initialCatId]?.name}
+                  </p>
+                </div>
+                <div className={`flex items-center gap-1.5 ${subtle}`}>
+                  <Lock size={12} />
+                  <span className="text-[9px] font-bold uppercase tracking-widest">Locked</span>
+                </div>
               </div>
             ) : (
-              <div className="flex gap-2">
-                <div className="relative flex-1">
-                  <select
-                    value={formData.categoryId}
-                    onChange={(e) => setFormData({ ...formData, categoryId: e.target.value })}
-                    style={{ color: formData.categoryId ? categories[formData.categoryId]?.color : undefined }}
-                    className={`w-full p-4 rounded-xl outline-none appearance-none font-bold text-sm tracking-tight ${inputBg} ${!formData.categoryId ? subtle : ''}`}
-                  >
-                    <option value="" className="text-slate-400">Select Material…</option>
-                    {Object.values(categories).map(c => (
-                      <option
-                        key={c.id}
-                        value={c.id}
-                        style={{ color: c.color, backgroundColor: isDarkMode ? '#1e293b' : '#ffffff' }}
-                        className="font-bold"
-                      >
-                        ● {c.name.toUpperCase()}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown
-                    className={`absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none ${subtle}`}
-                    size={16}
-                  />
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setIsCreatingNew(true)}
-                  className={`p-4 text-blue-500 rounded-xl active:scale-95 ${inputBg}`}
-                  title="New material"
-                >
-                  <Plus size={18} />
-                </button>
-              </div>
+              // NEW SETUP MODE: Text input only (Dropdown is gone!)
+              <input
+                type="text"
+                autoComplete="off"
+                placeholder="New Material Name (e.g. Bricks)"
+                value={formData.newCategoryName}
+                onChange={(e) => setFormData({ ...formData, newCategoryName: e.target.value })}
+                className={`w-full p-4 rounded-xl outline-none font-semibold text-sm border focus:border-blue-500/40 transition-colors ${inputBg} ${textClr} ${
+                  isDarkMode ? 'border-slate-700/50' : 'border-slate-200'
+                }`}
+                required
+              />
             )}
 
-            {/* Vendor Autocomplete */}
-            <datalist id="vendor-list">
-              {/* FIX #11: Use vendor name as key instead of array index */}
-              {uniqueVendors.map(v => <option key={v} value={v} />)}
-            </datalist>
-            <input
-              type="text"
-              list="vendor-list"
-              placeholder="Vendor / Note (optional)"
-              value={formData.vendor}
-              onChange={(e) => setFormData({ ...formData, vendor: e.target.value })}
-              className={`w-full p-4 rounded-xl outline-none font-medium border border-transparent focus:border-blue-500/20 transition-colors ${inputBg} ${textClr}`}
-            />
+            <div className="flex gap-2">
+              {/* Date Picker */}
+              <div className={`relative flex items-center rounded-xl flex-1 ${inputBg}`}>
+                <Calendar size={16} className={`absolute left-3.5 pointer-events-none ${subtle}`} />
+                <input
+                  type="datetime-local"
+                  value={formData.date}
+                  onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                  onClick={(e) => e.target.showPicker?.()}
+                  style={{ colorScheme: isDarkMode ? 'dark' : 'light' }}
+                  className={`w-full py-4 pl-10 pr-3 outline-none font-semibold text-xs tracking-tight cursor-pointer bg-transparent ${textClr}`}
+                />
+              </div>
+
+              {/* Vendor Autocomplete - Side by Side with Date */}
+              <div className="flex-1">
+                <datalist id="vendor-list">
+                  {uniqueVendors.map(v => <option key={v} value={v} />)}
+                </datalist>
+                <input
+                  type="text"
+                  list="vendor-list"
+                  autoComplete="off"
+                  placeholder="Vendor (opt.)"
+                  value={formData.vendor}
+                  onChange={(e) => setFormData({ ...formData, vendor: e.target.value })}
+                  className={`w-full p-4 rounded-xl outline-none text-xs font-semibold border border-transparent focus:border-blue-500/40 transition-colors ${inputBg} ${textClr}`}
+                />
+              </div>
+            </div>
+
           </div>
 
           {/* Submit Button */}
