@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { X, Calendar, Lock } from 'lucide-react'
+import { X, Calendar, Lock, Hash } from 'lucide-react'
 import { getNextColor } from './colors'
 
 // Collision-safe ID generator
@@ -29,12 +29,13 @@ export default function TransactionModal({
     amount:          '',
     vendor:          '',
     newCategoryName: '',
+    unit:            '', 
+    quantity:        '', 
     date:            getNow(),
   })
 
   const inputRef = useRef(null)
 
-  // 1. FIX: The "Sticky State" killer function
   const resetForm = () => {
     setFormData({
       type:            'expense',
@@ -42,36 +43,48 @@ export default function TransactionModal({
       amount:          '',
       vendor:          '',
       newCategoryName: '',
+      unit:            '',
+      quantity:        '',
       date:            getNow(),
     })
   }
 
-  // 2. FIX: Explicitly clear/set state whenever the modal opens or closes
   useEffect(() => {
     if (isOpen) {
       setFormData({
         type:            initialType || 'expense',
         categoryId:      initialCatId || '',
         amount:          initialAmount ? String(initialAmount) : '',
-        vendor:          '', // Always wipe vendor on open
-        newCategoryName: '', // Always wipe new name on open
+        vendor:          '', 
+        newCategoryName: '', 
+        unit:            '', 
+        quantity:        '', 
         date:            getNow(),
       })
       setTimeout(() => inputRef.current?.focus(), 100)
     } else {
-      resetForm() // Wipe clean on close
+      resetForm()
     }
   }, [isOpen, initialCatId, initialAmount, initialType])
 
   if (!isOpen) return null
 
-  // Determine which mode we are in
   const isFastLogMode = !!initialCatId
+
+  // Determine if we should show the quantity input.
+  const shouldShowQuantity = formData.type === 'expense' || (formData.type === 'payment' && !isFastLogMode)
 
   const handleAmountChange = (e) => {
     const val = e.target.value
     if (val === '' || /^\d*\.?\d*$/.test(val)) {
       setFormData({ ...formData, amount: val })
+    }
+  }
+
+  const handleQuantityChange = (e) => {
+    const val = e.target.value
+    if (val === '' || /^\d*\.?\d*$/.test(val)) {
+      setFormData({ ...formData, quantity: val })
     }
   }
 
@@ -82,13 +95,13 @@ export default function TransactionModal({
     let finalCatId     = formData.categoryId
     let newCategoryObj = null
 
-    // 3. FIX: Separated Flow Logic
     if (!isFastLogMode) {
-      if (!formData.newCategoryName.trim()) return // Prevent blank new materials
+      if (!formData.newCategoryName.trim()) return
       finalCatId     = makeId('cat')
       newCategoryObj = {
         id:    finalCatId,
         name:  formData.newCategoryName.trim(),
+        unit:  formData.unit.trim() || null, 
         color: getNextColor(Object.keys(categories).length),
       }
     }
@@ -100,11 +113,12 @@ export default function TransactionModal({
       categoryId: finalCatId,
       type:       formData.type,
       amount:     Number(formData.amount),
+      quantity:   shouldShowQuantity && formData.quantity ? Number(formData.quantity) : null,
       vendor:     formData.vendor.trim(),
       date:       formData.date,
     }, newCategoryObj)
 
-    resetForm() // Final wipe before closing
+    resetForm()
     onClose()
   }
 
@@ -120,6 +134,9 @@ export default function TransactionModal({
   const accentBg     = isExpense ? 'bg-rose-500'        : 'bg-emerald-500'
   const accentShadow = isExpense ? 'shadow-rose-500/30' : 'shadow-emerald-500/30'
 
+  // Retrieve the locked unit if we are in Fast-Log mode
+  const lockedUnit = isFastLogMode ? categories[initialCatId]?.unit : null
+
   return (
     <div
       className="fixed inset-0 bg-slate-950/75 backdrop-blur-sm z-[100] flex items-end justify-center"
@@ -133,7 +150,7 @@ export default function TransactionModal({
         <div className="flex justify-between items-center mb-6">
           <div>
             <h2 className={`text-2xl font-black uppercase tracking-tight ${accentColor}`}>
-              {isFastLogMode ? `Log ${formData.type}` : 'New Material'}
+              {isFastLogMode ? `Log ${formData.type}` : 'New Setup'}
             </h2>
             <p className={`text-[10px] font-medium mt-0.5 uppercase tracking-widest ${subtle}`}>
               {isFastLogMode ? 'Add to existing ledger' : 'Setup a new category'}
@@ -192,7 +209,7 @@ export default function TransactionModal({
 
           <div className="space-y-3">
             
-            {/* 4. FIX: The Separated Contextual Flow */}
+            {/* The Separated Contextual Flow */}
             {isFastLogMode ? (
               // FAST-LOG MODE: Locked Category Display
               <div className={`p-4 rounded-xl flex items-center justify-between border border-transparent ${inputBg}`}>
@@ -206,28 +223,62 @@ export default function TransactionModal({
                   </p>
                 </div>
                 <div className={`flex items-center gap-1.5 ${subtle}`}>
+                  {lockedUnit && (
+                     <span className="text-[10px] font-bold uppercase tracking-widest bg-slate-500/10 px-2 py-0.5 rounded-md mr-2">
+                       Measured in {lockedUnit}
+                     </span>
+                  )}
                   <Lock size={12} />
-                  <span className="text-[9px] font-bold uppercase tracking-widest">Locked</span>
                 </div>
               </div>
             ) : (
-              // NEW SETUP MODE: Text input only (Dropdown is gone!)
-              <input
-                type="text"
-                autoComplete="off"
-                placeholder="New Material Name (e.g. Bricks)"
-                value={formData.newCategoryName}
-                onChange={(e) => setFormData({ ...formData, newCategoryName: e.target.value })}
-                className={`w-full p-4 rounded-xl outline-none font-semibold text-sm border focus:border-blue-500/40 transition-colors ${inputBg} ${textClr} ${
-                  isDarkMode ? 'border-slate-700/50' : 'border-slate-200'
-                }`}
-                required
-              />
+              // NEW SETUP MODE: Name and Unit (FIXED: Converted to strictly contained Grid)
+              <div className="grid grid-cols-3 gap-2">
+                <input
+                  type="text"
+                  autoComplete="off"
+                  placeholder="Material Name (e.g. Cement)"
+                  value={formData.newCategoryName}
+                  onChange={(e) => setFormData({ ...formData, newCategoryName: e.target.value })}
+                  className={`col-span-2 w-full p-4 rounded-xl outline-none font-semibold text-sm border focus:border-blue-500/40 transition-colors ${inputBg} ${textClr} ${
+                    isDarkMode ? 'border-slate-700/50' : 'border-slate-200'
+                  }`}
+                  required
+                />
+                <input
+                  type="text"
+                  autoComplete="off"
+                  placeholder="Unit (opt.)"
+                  value={formData.unit}
+                  onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
+                  className={`col-span-1 w-full p-4 rounded-xl outline-none font-semibold text-sm border focus:border-blue-500/40 transition-colors ${inputBg} ${textClr} ${
+                    isDarkMode ? 'border-slate-700/50' : 'border-slate-200'
+                  }`}
+                  title="e.g. Bags, Tonnes, Liters"
+                />
+              </div>
             )}
 
-            <div className="flex gap-2">
+            {/* Optional Quantity Input */}
+            {shouldShowQuantity && (
+               <div className={`relative flex items-center rounded-xl w-full border border-transparent focus-within:border-blue-500/40 transition-colors ${inputBg}`}>
+                 <Hash size={16} className={`absolute left-3.5 pointer-events-none ${subtle}`} />
+                 <input
+                   type="text"
+                   inputMode="decimal"
+                   autoComplete="off"
+                   placeholder={`Quantity / No. of ${lockedUnit || formData.unit || 'Items'} (Optional)`}
+                   value={formData.quantity}
+                   onChange={handleQuantityChange}
+                   className={`w-full py-4 pl-10 pr-3 outline-none font-semibold text-sm tracking-tight bg-transparent ${textClr}`}
+                 />
+               </div>
+            )}
+
+            {/* Date and Vendor (FIXED: Converted to Grid) */}
+            <div className="grid grid-cols-2 gap-2">
               {/* Date Picker */}
-              <div className={`relative flex items-center rounded-xl flex-1 ${inputBg}`}>
+              <div className={`relative flex items-center w-full rounded-xl ${inputBg}`}>
                 <Calendar size={16} className={`absolute left-3.5 pointer-events-none ${subtle}`} />
                 <input
                   type="datetime-local"
@@ -239,8 +290,8 @@ export default function TransactionModal({
                 />
               </div>
 
-              {/* Vendor Autocomplete - Side by Side with Date */}
-              <div className="flex-1">
+              {/* Vendor Autocomplete */}
+              <div className="w-full">
                 <datalist id="vendor-list">
                   {uniqueVendors.map(v => <option key={v} value={v} />)}
                 </datalist>

@@ -16,7 +16,6 @@ export default function SetupTab({
   const fileInputRef = useRef(null)
   const [projects, setProjects] = useState([])
 
-  // Removed hardcoded "Site A" — list built only from storage + current active project
   useEffect(() => {
     const found = Object.keys(localStorage)
       .filter(k => k.startsWith('siteCategories_'))
@@ -43,7 +42,6 @@ export default function SetupTab({
   }
 
   const handleCycleColor = (id) => {
-    // cycleColor picks from the curated palette, avoiding the current color
     const newColor = cycleColor(categories[id]?.color)
     setCategories({ ...categories, [id]: { ...categories[id], color: newColor } })
   }
@@ -57,8 +55,6 @@ export default function SetupTab({
     }
   }
 
-  // FIX #5: Both export helpers now call revokeObjectURL immediately after
-  // click() to prevent URL accumulation in memory across repeated exports.
   const handleExport = () => {
     const data = JSON.stringify({ categories, transactions })
     const blob = new Blob([data], { type: 'application/json' })
@@ -67,14 +63,18 @@ export default function SetupTab({
     link.href     = url
     link.download = `${activeProject}-backup.json`
     link.click()
-    URL.revokeObjectURL(url) // FIX #5
+    URL.revokeObjectURL(url) 
   }
 
   const handleExportCSV = () => {
-    const headers = ['Date', 'Type', 'Material', 'Vendor', 'Amount']
+    const headers = ['Date', 'Type', 'Material', 'Vendor', 'Quantity', 'Unit', 'Amount']
     const rows = transactions.map(tx => {
-      const catName = categories[tx.categoryId]?.name || 'Unknown'
-      return `"${tx.date}","${tx.type}","${catName}","${tx.vendor || ''}",${tx.amount}`
+      const cat = categories[tx.categoryId] || {}
+      const catName = cat.name || 'Unknown'
+      const catUnit = cat.unit || ''
+      const qty = tx.quantity || ''
+      
+      return `"${tx.date}","${tx.type}","${catName}","${tx.vendor || ''}","${qty}","${catUnit}",${tx.amount}`
     })
     const csvContent = [headers.join(','), ...rows].join('\n')
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
@@ -83,12 +83,10 @@ export default function SetupTab({
     link.href     = url
     link.download = `${activeProject}-export.csv`
     link.click()
-    URL.revokeObjectURL(url) // FIX #5
+    URL.revokeObjectURL(url) 
   }
 
-  // FIX #6: Guard against printWindow being null (happens when browser blocks
-  // popups, which is common on Android). Without this, document.write() on a
-  // null reference throws a TypeError and crashes the export silently.
+  // ── UPDATED: High-Contrast Light Mode PDF Export ───────────────────────────
   const handleExportPDF = () => {
     const printWindow = window.open('', '', 'height=800,width=800')
 
@@ -97,39 +95,214 @@ export default function SetupTab({
       return
     }
 
-    let html = `
-      <html><head><title>${activeProject} Report</title>
-      <style>
-        body { font-family: system-ui, sans-serif; padding: 20px; color: #333; }
-        h1 { color: #0f172a; text-transform: uppercase; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px; font-size: 24px; margin-bottom: 5px; }
-        p { color: #64748b; font-size: 12px; font-weight: bold; text-transform: uppercase; margin-top: 0; margin-bottom: 30px; }
-        table { width: 100%; border-collapse: collapse; font-size: 14px; }
-        th, td { border-bottom: 1px solid #cbd5e1; padding: 12px 8px; text-align: left; }
-        th { background-color: #f8fafc; text-transform: uppercase; font-size: 10px; letter-spacing: 1px; color: #64748b; }
-        .amount { font-family: monospace; font-size: 16px; }
-      </style>
-      </head><body>
-      <h1>${activeProject} Report</h1>
-      <p>Generated on: ${new Date().toLocaleDateString('en-IN')}</p>
-      <table>
-        <tr><th>Date</th><th>Material</th><th>Vendor</th><th>Type</th><th>Amount (₹)</th></tr>
-    `
-    transactions.forEach(tx => {
-      const catName = categories[tx.categoryId]?.name || 'Unknown'
-      html += `<tr>
-        <td style="font-size: 12px; color: #475569;">${tx.date}</td>
-        <td><b>${catName.toUpperCase()}</b></td>
-        <td style="color: #64748b;">${tx.vendor || '-'}</td>
-        <td>${tx.type.toUpperCase()}</td>
-        <td class="amount">₹${tx.amount.toLocaleString('en-IN')}</td>
-      </tr>`
+    // 1. Calculate the Aggregates for the Report
+    let globalCost = 0
+    let globalPaid = 0
+    
+    const matStats = {}
+    Object.values(categories).forEach(c => {
+      matStats[c.id] = { ...c, totalCost: 0, totalPaid: 0, totalQty: 0 }
     })
-    html += `</table></body></html>`
+
+    transactions.forEach(tx => {
+      if (tx.type === 'expense') {
+        globalCost += tx.amount
+        if (matStats[tx.categoryId]) {
+          matStats[tx.categoryId].totalCost += tx.amount
+          matStats[tx.categoryId].totalQty += (tx.quantity || 0)
+        }
+      } else {
+        globalPaid += tx.amount
+        if (matStats[tx.categoryId]) {
+          matStats[tx.categoryId].totalPaid += tx.amount
+        }
+      }
+    })
+
+    const globalBalance = globalCost - globalPaid
+    const isAdvanced = globalBalance < 0
+
+    const activeMats = Object.values(matStats)
+      .filter(m => m.totalCost > 0 || m.totalPaid > 0)
+      .sort((a, b) => b.totalCost - a.totalCost)
+
+    // 2. Build the exact HTML Replica (Light Mode)
+    let html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>${activeProject} - Financial Report</title>
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800;900&display=swap" rel="stylesheet">
+        <style>
+          /* Force Light Mode Printing with exact colors for graphs */
+          @media print {
+            body { background-color: #ffffff !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+            .card { background-color: #ffffff !important; border-color: #e2e8f0 !important; }
+            .stat-box { background-color: #f8fafc !important; border-color: #e2e8f0 !important; }
+            th { background-color: #f1f5f9 !important; }
+            tr:nth-child(even) td { background-color: #f8fafc !important; }
+            tr:nth-child(odd) td { background-color: #ffffff !important; }
+          }
+          
+          body { 
+            font-family: 'Inter', sans-serif; 
+            background-color: #ffffff; 
+            color: #0f172a; 
+            margin: 0; 
+            padding: 40px; 
+          }
+          .container { max-w-[800px] margin: auto; }
+          .header { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid #e2e8f0; padding-bottom: 20px; margin-bottom: 30px; }
+          .header h1 { font-weight: 900; margin: 0; font-size: 28px; letter-spacing: -1px; text-transform: uppercase; color: #0f172a; }
+          .header p { margin: 5px 0 0 0; font-size: 10px; font-weight: 800; color: #64748b; letter-spacing: 2px; text-transform: uppercase; }
+          
+          .card { background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 24px; margin-bottom: 30px; page-break-inside: avoid; }
+          
+          /* Hero Stats */
+          .hero-label { font-size: 10px; font-weight: 800; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 5px; color: ${isAdvanced ? '#059669' : '#64748b'}; }
+          .hero-amount { font-size: 48px; font-weight: 900; letter-spacing: -2px; margin: 0 0 20px 0; color: ${isAdvanced ? '#059669' : (globalBalance === 0 ? '#64748b' : '#e11d48')}; }
+          
+          .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+          .stat-box { background-color: #f8fafc; padding: 16px; border-radius: 12px; border: 1px solid #e2e8f0; }
+          .stat-label { font-size: 9px; font-weight: 800; letter-spacing: 2px; text-transform: uppercase; color: #64748b; margin: 0 0 4px 0; }
+          .stat-val { font-size: 18px; font-weight: 900; margin: 0; color: #0f172a; }
+          
+          /* Graph */
+          .bar-container { height: 12px; border-radius: 99px; background-color: #e2e8f0; display: flex; overflow: hidden; margin: 20px 0; }
+          .legend { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 10px; }
+          .legend-item { display: flex; align-items: center; gap: 6px; font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: #475569; }
+          .legend-dot { width: 8px; height: 8px; border-radius: 50%; }
+
+          /* Tables */
+          h3 { font-size: 12px; font-weight: 900; letter-spacing: 3px; text-transform: uppercase; color: #475569; margin: 40px 0 15px 0; }
+          table { width: 100%; border-collapse: separate; border-spacing: 0; border-radius: 12px; overflow: hidden; font-size: 12px; border: 1px solid #e2e8f0; }
+          th { background-color: #f1f5f9; color: #475569; font-size: 9px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; padding: 12px 16px; text-align: left; border-bottom: 1px solid #e2e8f0; }
+          td { padding: 12px 16px; font-weight: 600; border-bottom: 1px solid #f1f5f9; color: #0f172a; }
+          tr:nth-child(even) td { background-color: #f8fafc; }
+          tr:nth-child(odd) td { background-color: #ffffff; }
+          .mono { font-family: monospace; font-size: 14px; font-weight: 700; }
+          .text-red { color: #e11d48; }
+          .text-green { color: #059669; }
+          .text-blue { color: #2563eb; }
+          .text-muted { color: #64748b; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <div>
+              <h1>${activeProject}</h1>
+              <p>SiteTracker Financial Export</p>
+            </div>
+            <div style="text-align: right;">
+              <p>Generated On</p>
+              <div style="font-weight: 800; font-size: 14px; color: #0f172a;">${new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
+            </div>
+          </div>
+
+          <div class="card">
+            <p class="hero-label">${isAdvanced ? 'Advanced Payment Surplus' : (globalBalance === 0 ? 'All Cleared' : 'Total Balance Due')}</p>
+            <h2 class="hero-amount">${isAdvanced ? '+' : ''}₹${Math.abs(globalBalance).toLocaleString('en-IN')}</h2>
+            
+            <div class="grid-2">
+              <div class="stat-box">
+                <p class="stat-label">Total Material Cost</p>
+                <p class="stat-val">₹${globalCost.toLocaleString('en-IN')}</p>
+              </div>
+              <div class="stat-box" style="border: 1px solid rgba(5,150,105,0.2); background-color: #ecfdf5 !important;">
+                <p class="stat-label" style="color: #059669;">Total Payments Sent</p>
+                <p class="stat-val text-green">₹${globalPaid.toLocaleString('en-IN')}</p>
+              </div>
+            </div>
+          </div>
+
+          ${globalCost > 0 ? `
+          <div class="card">
+            <p class="hero-label" style="color: #64748b;">Cost Breakdown</p>
+            <div class="bar-container">
+              ${activeMats.map(m => `
+                <div style="width: ${(m.totalCost / globalCost) * 100}%; background-color: ${m.color}; height: 100%;"></div>
+              `).join('')}
+            </div>
+            <div class="legend">
+              ${activeMats.slice(0, 6).map(m => `
+                <div class="legend-item">
+                  <div class="legend-dot" style="background-color: ${m.color};"></div>
+                  ${m.name} (${Math.round((m.totalCost / globalCost) * 100)}%)
+                </div>
+              `).join('')}
+            </div>
+          </div>
+          ` : ''}
+
+          <h3>Material Summaries & Inventory</h3>
+          <table>
+            <tr>
+              <th>Material</th>
+              <th>Total Quantity Delivered</th>
+              <th>Total Cost</th>
+              <th>Paid</th>
+              <th style="text-align: right;">Status / Balance</th>
+            </tr>
+            ${activeMats.map(m => {
+              const bal = m.totalCost - m.totalPaid;
+              const isSurplus = bal < 0;
+              const qtyStr = m.totalQty > 0 ? `${m.totalQty.toLocaleString('en-IN')} ${m.unit || 'Units'}` : '-';
+              
+              return `
+              <tr>
+                <td><b style="color: ${m.color};">${m.name.toUpperCase()}</b></td>
+                <td class="text-blue">${qtyStr}</td>
+                <td>₹${m.totalCost.toLocaleString('en-IN')}</td>
+                <td class="text-green">₹${m.totalPaid.toLocaleString('en-IN')}</td>
+                <td style="text-align: right;" class="${isSurplus ? 'text-green' : (bal > 0 ? 'text-red' : '')}">
+                  <b>${isSurplus ? 'ADVANCE: ' : (bal > 0 ? 'DUE: ' : '')}${isSurplus ? '+' : ''}₹${Math.abs(bal).toLocaleString('en-IN')}</b>
+                </td>
+              </tr>
+              `
+            }).join('')}
+          </table>
+
+          <h3>Complete Transaction Log</h3>
+          <table>
+            <tr>
+              <th>Date & Time</th>
+              <th>Type</th>
+              <th>Material</th>
+              <th>Vendor</th>
+              <th>Quantity</th>
+              <th style="text-align: right;">Amount</th>
+            </tr>
+            ${transactions.map(tx => {
+              const cat = categories[tx.categoryId] || { name: 'Unknown', color: '#94a3b8' }
+              const isExp = tx.type === 'expense'
+              const dateObj = new Date(tx.date)
+              // Updated to include full year and time
+              const dateStr = dateObj.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) + ' &bull; ' + dateObj.toLocaleTimeString('en-IN', { hour: '2-digit', minute:'2-digit' })
+              const qtyStr = tx.quantity ? `${tx.quantity.toLocaleString('en-IN')} ${cat.unit || ''}` : '-'
+
+              return `
+              <tr>
+                <td class="text-muted" style="font-size: 11px;">${dateStr.toUpperCase()}</td>
+                <td><b class="${isExp ? 'text-red' : 'text-green'}">${isExp ? 'EXPENSE' : 'PAYMENT'}</b></td>
+                <td><span style="display:inline-block; width:6px; height:6px; border-radius:50%; background-color:${cat.color}; margin-right:6px;"></span><b>${cat.name.toUpperCase()}</b></td>
+                <td class="text-muted">${tx.vendor || '-'}</td>
+                <td class="text-blue">${qtyStr}</td>
+                <td class="mono ${isExp ? 'text-red' : 'text-green'}" style="text-align: right;">${isExp ? '' : '+'}₹${tx.amount.toLocaleString('en-IN')}</td>
+              </tr>
+              `
+            }).join('')}
+          </table>
+        </div>
+      </body>
+      </html>
+    `
 
     printWindow.document.write(html)
     printWindow.document.close()
     printWindow.focus()
-    setTimeout(() => { printWindow.print(); printWindow.close() }, 250)
+    // Timeout gives browser time to render Google Fonts before opening print dialog
+    setTimeout(() => { printWindow.print(); printWindow.close() }, 500)
   }
 
   const card   = isDarkMode ? 'bg-slate-900 border-slate-800/70 text-slate-100' : 'bg-white border-slate-200/80 text-slate-800'
@@ -193,17 +366,27 @@ export default function SetupTab({
               <div className="flex items-center gap-3">
                 <button
                   onClick={() => handleCycleColor(cat.id)}
-                  className="w-9 h-9 rounded-lg flex items-center justify-center text-white shadow-md active:scale-90 transition-transform"
+                  className="w-9 h-9 rounded-lg flex items-center justify-center text-white shadow-md active:scale-90 transition-transform shrink-0"
                   style={{ backgroundColor: cat.color }}
                   title="Cycle color"
                 >
                   <RefreshCw size={13} />
                 </button>
-                <p className="font-semibold uppercase tracking-tight text-sm">{cat.name}</p>
+                <div className="flex items-center flex-wrap gap-2">
+                  <p className="font-semibold uppercase tracking-tight text-sm">{cat.name}</p>
+                  
+                  {cat.unit && (
+                    <span className={`text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-md ${
+                      isDarkMode ? 'bg-slate-800 text-slate-400' : 'bg-slate-100 text-slate-500'
+                    }`}>
+                      {cat.unit}
+                    </span>
+                  )}
+                </div>
               </div>
               <button
                 onClick={() => handleDelete(cat.id)}
-                className={`p-2 rounded-lg transition-all active:scale-90 ${subtle} hover:text-rose-500 hover:bg-rose-50`}
+                className={`p-2 rounded-lg transition-all active:scale-90 shrink-0 ${subtle} hover:text-rose-500 hover:bg-rose-50`}
               >
                 <Trash2 size={16} />
               </button>

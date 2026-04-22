@@ -1,12 +1,11 @@
 import { useState } from 'react'
-import { Trash2, ArrowUpRight, ArrowDownLeft, Search } from 'lucide-react'
+import { Trash2, ArrowUpRight, ArrowDownLeft, Search, Package } from 'lucide-react'
 
 export default function LogTab({ isDarkMode, transactions, categories, setTransactions }) {
   const [search, setSearch]         = useState('')
   const [filter, setFilter]         = useState('all')
   const [timeFilter, setTimeFilter] = useState('all')
 
-  // Use functional updater (prev =>) to avoid stale closure.
   const handleDelete = (id) => {
     if (window.confirm('Delete this transaction?')) {
       setTransactions(prev => prev.filter(tx => tx.id !== id))
@@ -20,7 +19,6 @@ export default function LogTab({ isDarkMode, transactions, categories, setTransa
       (tx.vendor && tx.vendor.toLowerCase().includes(search.toLowerCase()))
     const matchesFilter = filter === 'all' || tx.type === filter
 
-    // Anchored to start-of-day boundaries to prevent floating-point off-by-one.
     let matchesTime = true
     if (timeFilter !== 'all') {
       const txDate = new Date(tx.date)
@@ -31,7 +29,6 @@ export default function LogTab({ isDarkMode, transactions, categories, setTransa
           txDate.getMonth()    === now.getMonth() &&
           txDate.getFullYear() === now.getFullYear()
       } else if (timeFilter === 'week') {
-        // Anchor both ends to midnight so comparisons are day-clean
         const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
         const sevenDaysAgo = new Date(startOfToday)
         sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
@@ -58,7 +55,6 @@ export default function LogTab({ isDarkMode, transactions, categories, setTransa
 
       {/* ── Search & Filter Card ──────────────────────────────────────────── */}
       <div className={`p-4 rounded-2xl border shadow-sm space-y-3 ${cardBase}`}>
-        {/* Search input */}
         <div className="relative">
           <Search className={`absolute left-3.5 top-1/2 -translate-y-1/2 ${subtle}`} size={16} />
           <input
@@ -70,7 +66,6 @@ export default function LogTab({ isDarkMode, transactions, categories, setTransa
           />
         </div>
 
-        {/* Time filter */}
         <select
           value={timeFilter}
           onChange={(e) => setTimeFilter(e.target.value)}
@@ -81,7 +76,6 @@ export default function LogTab({ isDarkMode, transactions, categories, setTransa
           <option value="week">Time: Past 7 Days</option>
         </select>
 
-        {/* Type filter pills */}
         <div className="flex gap-2">
           {['all', 'expense', 'payment'].map(type => (
             <button
@@ -104,13 +98,14 @@ export default function LogTab({ isDarkMode, transactions, categories, setTransa
         {filteredTransactions.map(tx => {
           const cat       = categories[tx.categoryId] || { name: 'Unknown', color: '#94a3b8' }
           const isExpense = tx.type === 'expense'
+          
           return (
             <div
               key={tx.id}
               className={`p-3.5 rounded-xl border flex items-center justify-between transition-colors ${cardBase}`}
             >
               <div className="flex items-center gap-3">
-                {/* Type icon badge - Updated with Dark Mode support for SaaS Look */}
+                {/* Type icon badge */}
                 <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
                   isExpense 
                     ? (isDarkMode ? 'bg-rose-500/10 text-rose-500' : 'bg-rose-50 text-rose-500') 
@@ -122,23 +117,35 @@ export default function LogTab({ isDarkMode, transactions, categories, setTransa
                 </div>
 
                 <div>
-                  {/* Category dot + name */}
-                  <div className="flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: cat.color }} />
-                    <p className={`font-bold text-xs uppercase tracking-tight leading-tight ${
-                      isDarkMode ? 'text-slate-100' : 'text-slate-800'
-                    }`}>
-                      {cat.name}
-                    </p>
+                  {/* Category dot + name + QUANTITY PILL */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: cat.color }} />
+                      <p className={`font-bold text-xs uppercase tracking-tight leading-tight ${
+                        isDarkMode ? 'text-slate-100' : 'text-slate-800'
+                      }`}>
+                        {cat.name}
+                      </p>
+                    </div>
+                    
+                    {/* NEW: Transaction Quantity Pill */}
+                    {tx.quantity && (
+                      <div className={`flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[8px] font-bold uppercase tracking-widest ${
+                        isDarkMode ? 'bg-blue-500/20 text-blue-400' : 'bg-blue-50 text-blue-600'
+                      }`}>
+                        <Package size={10} strokeWidth={2.5} />
+                        {tx.quantity.toLocaleString()} {cat.unit || 'Qty'}
+                      </div>
+                    )}
                   </div>
-                  <p className={`text-[9px] font-medium mt-0.5 ${subtle}`}>
+                  
+                  <p className={`text-[9px] font-medium mt-1 ${subtle}`}>
                     {formatDateTime(tx.date)}{tx.vendor && ` · ${tx.vendor}`}
                   </p>
                 </div>
               </div>
 
               <div className="flex items-center gap-2.5">
-                {/* AMOUNT TEXT - Updated to Red for Expenses, Green for Payments */}
                 <p className={`font-black text-sm tracking-tight ${
                   isExpense ? 'text-rose-500' : 'text-emerald-500'
                 }`}>
